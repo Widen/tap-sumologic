@@ -11,19 +11,19 @@ class SearchJobStream(SumoLogicStream):
     """Define dynamic stream for Search Job API queries."""
 
     def __init__(
-        self,
-        tap: Any,
-        name: str,
-        query_type: str,
-        primary_keys: Optional[list] = None,
-        replication_key: Optional[str] = None,
-        schema: Optional[dict] = None,
-        query: Optional[str] = None,
-        by_receipt_time: Optional[bool] = None,
-        auto_parsing_mode: Optional[str] = None,
-        quantization: Optional[int] = None,
-        rollup: Optional[str] = None,
-        timeshift: Optional[int] = None,
+            self,
+            tap: Any,
+            name: str,
+            query_type: str,
+            primary_keys: Optional[list] = None,
+            replication_key: Optional[str] = None,
+            schema: Optional[dict] = None,
+            query: Optional[str] = None,
+            by_receipt_time: Optional[bool] = None,
+            auto_parsing_mode: Optional[str] = None,
+            quantization: Optional[int] = None,
+            rollup: Optional[str] = None,
+            timeshift: Optional[int] = None,
     ) -> None:
         """Class initialization.
 
