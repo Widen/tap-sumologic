@@ -11,19 +11,19 @@ class SearchJobStream(SumoLogicStream):
     """Define dynamic stream for Search Job API queries."""
 
     def __init__(
-            self,
-            tap: Any,
-            name: str,
-            query_type: str,
-            primary_keys: Optional[list] = None,
-            replication_key: Optional[str] = None,
-            schema: Optional[dict] = None,
-            query: Optional[str] = None,
-            by_receipt_time: Optional[bool] = None,
-            auto_parsing_mode: Optional[str] = None,
-            quantization: Optional[int] = None,
-            rollup: Optional[str] = None,
-            timeshift: Optional[int] = None,
+        self,
+        tap: Any,
+        name: str,
+        query_type: str,
+        primary_keys: Optional[list] = None,
+        replication_key: Optional[str] = None,
+        schema: Optional[dict] = None,
+        query: Optional[str] = None,
+        by_receipt_time: Optional[bool] = None,
+        auto_parsing_mode: Optional[str] = None,
+        quantization: Optional[int] = None,
+        rollup: Optional[str] = None,
+        timeshift: Optional[int] = None,
     ) -> None:
         """Class initialization.
 
@@ -125,10 +125,6 @@ class SearchJobStream(SumoLogicStream):
 
                     if len(recs) > 0:
                         count = count + len(recs)
-                        # Add delay between paginated API calls to avoid rate limit
-                        if count < record_count:
-                            self.logger.info("Waiting 15 seconds before next paginated API call to avoid rate limit...")
-                            time.sleep(15)
                     else:
                         break  # make sure we exit if nothing comes back
 
@@ -142,9 +138,6 @@ class SearchJobStream(SumoLogicStream):
                 self.timeshift,
             )
             records = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            # Enable below lines to add delay iff we've back to back metric queries to be triggered to avoid rate limit
-            # self.logger.info("Waiting 15 seconds after metrics query to avoid rate limit...")
-            # time.sleep(15)
 
         for row in records:
             yield row
