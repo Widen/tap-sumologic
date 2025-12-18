@@ -58,7 +58,9 @@ class SearchJobStream(SumoLogicStream):
         self.rollup = rollup
         self.timeshift = timeshift
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def get_records(
+        self, context: Optional[dict]
+    ) -> Iterable[Dict[str, Any]]:  # noqa: C901
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
@@ -128,7 +130,8 @@ class SearchJobStream(SumoLogicStream):
                         # Add delay between paginated API calls to avoid rate limit
                         if count < record_count:
                             self.logger.info(
-                                "Waiting 15 seconds before next paginated API call to avoid rate limit..."
+                                "Waiting 15 seconds before next page "
+                                "to avoid rate limit..."
                             )
                             time.sleep(15)
                     else:
