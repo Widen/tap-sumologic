@@ -127,7 +127,9 @@ class SearchJobStream(SumoLogicStream):
                         count = count + len(recs)
                         # Add delay between paginated API calls to avoid rate limit
                         if count < record_count:
-                            self.logger.info("Waiting 15 seconds before next paginated API call to avoid rate limit...")
+                            self.logger.info(
+                                "Waiting 15 seconds before next paginated API call to avoid rate limit..."
+                            )
                             time.sleep(15)
                     else:
                         break  # make sure we exit if nothing comes back
