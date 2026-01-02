@@ -227,6 +227,7 @@ class SumoLogic(object):
         fields = []
         delay = 5
         count = 0
+        max_wait_iterations = 12  # Wait up to 60 seconds for aggregation queries
 
         search_job = self.search_job(
             q, from_time, to_time, time_zone, by_receipt_time, auto_parsing_mode
@@ -238,7 +239,13 @@ class SumoLogic(object):
                 break
             time.sleep(delay)
             count += 1
-            if count == 2:  # don't need to wait for all the results
+            # Wait longer for aggregation queries to complete
+            # to ensure computed fields are available
+            if count >= max_wait_iterations:
+                self.logger.warning(
+                    f"Schema discovery waiting longer than expected "
+                    f"({count * delay}s). Query might be complex."
+                )
                 break
             status = self.search_job_status(search_job)
 
