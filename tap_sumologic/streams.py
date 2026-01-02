@@ -146,9 +146,7 @@ class SearchJobStream(SumoLogicStream):
                 self.rollup,
                 self.timeshift,
             )
-            metrics_data = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            # Add custom columns to each metric
-            records = [{**metric, **custom_columns} for metric in metrics_data]
+            records = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
 
         for row in records:
             yield row
