@@ -283,7 +283,7 @@ class TapSumoLogic(Tap):
             }
 
         elif table_config["query_type"] == "metrics":
-            # Extract dimension keys from sample metric data for flattening
+            # Extract dimension keys from sample metric data
             dimension_keys = []
             if fields and len(fields) > 0:
                 sample_metric = fields[0]
@@ -295,9 +295,10 @@ class TapSumoLogic(Tap):
                     for dimension in dimensions:
                         dim_key = dimension.get("key", "")
                         if dim_key:
+                            # Use lowercase to match the flattening logic in streams.py
                             dimension_keys.append(dim_key.lower())
 
-            # Build schema with flattened dimension properties at top level
+            # Build schema with both nested and flattened properties
             properties = {
                 "metricDefinition": {"type": ["object", "null"]},
                 "points": {"type": ["object", "null"]},
@@ -311,11 +312,12 @@ class TapSumoLogic(Tap):
             properties["start_date"] = {"type": ["string", "null"]}
             properties["end_date"] = {"type": ["string", "null"]}
             properties["time_zone"] = {"type": ["string", "null"]}
+            properties["_SDC_EXTRACTED_AT"] = {"type": ["string", "null"]}
+            properties["_SDC_BATCHED_AT"] = {"type": ["string", "null"]}
+            properties["_SDC_DELETED_AT"] = {"type": ["string", "null"]}
 
-            # For metrics, use dimension keys + start_date as primary keys
-            # This ensures target-snowflake creates these columns and uses them
-            # in MERGE statements
-            key_properties = dimension_keys + ["start_date"] if dimension_keys else []
+            # Use flattened dimensions + start_date as key properties
+            key_properties = dimension_keys + ["start_date"]
 
             return {
                 "type": "object",
