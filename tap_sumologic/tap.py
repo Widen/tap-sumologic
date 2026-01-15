@@ -51,14 +51,14 @@ class TapSumoLogic(Tap):
             th.DateTimeType,
             default=datetime.datetime.today().isoformat(),  # type: ignore
             description="The latest record date to sync. Sets the `to` parameter "
-            "for all queries. Format: YYYY-MM-DDTHH:mm:ss",
+                        "for all queries. Format: YYYY-MM-DDTHH:mm:ss",
         ),
         th.Property(
             "time_zone",
             th.StringType,
             default="UTC",  # type: ignore
             description="The time zone for the queries. Sets the `timeZone` "
-            "parameter for all queries",
+                        "parameter for all queries",
         ),
         th.Property(
             "tables",
@@ -84,10 +84,10 @@ class TapSumoLogic(Tap):
                         required=False,
                         default="messages",
                         description="One of 'records', 'messages', 'metrics'. "
-                        "Default='messages'. "
-                        "Records are the result of a query with aggregation"
-                        ". Messages are the result of a query without "
-                        "aggregation.",
+                                    "Default='messages'. "
+                                    "Records are the result of a query with aggregation"
+                                    ". Messages are the result of a query without "
+                                    "aggregation.",
                     ),
                     th.Property(
                         "primary_keys",
@@ -95,47 +95,47 @@ class TapSumoLogic(Tap):
                         required=False,
                         default=[],
                         description="Additional fields to include in the primary keys."
-                        " Defaults to `[]`.",
+                                    " Defaults to `[]`.",
                     ),
                     th.Property(
                         "by_receipt_time",
                         th.BooleanType,
                         default=False,  # type: ignore
                         description="Define as true to run the search using "
-                        "receipt time. Only applicable on 'records' and 'messages' "
-                        "queries.",
+                                    "receipt time. Only applicable on 'records' and 'messages' "
+                                    "queries.",
                     ),
                     th.Property(
                         "auto_parsing_mode",
                         th.StringType,
                         default="intelligent",  # type: ignore
                         description="The value to provide for the autoParsingMode "
-                        "parameter. Default='intelligent' to match the "
-                        "behavior of the Sumologic Search Job UI. Only applicable on "
-                        "'records' and 'messages' queries.",
+                                    "parameter. Default='intelligent' to match the "
+                                    "behavior of the Sumologic Search Job UI. Only applicable on "
+                                    "'records' and 'messages' queries.",
                     ),
                     th.Property(
                         "quantization",
                         th.IntegerType,
                         description="Segregates time series data by time period. This "
-                        "allows you to create aggregated results in buckets of fixed "
-                        "intervals (for example, 5-minute intervals). The value is in "
-                        "milliseconds. Only applicable on 'metrics' queries.",
+                                    "allows you to create aggregated results in buckets of fixed "
+                                    "intervals (for example, 5-minute intervals). The value is in "
+                                    "milliseconds. Only applicable on 'metrics' queries.",
                     ),
                     th.Property(
                         "rollup",
                         th.StringType,
                         description="Can be Avg, Sum, Min, Max, Count or None. Only "
-                        "applicable on 'metrics' queries.",
+                                    "applicable on 'metrics' queries.",
                     ),
                     th.Property(
                         "timeshift",
                         th.IntegerType,
                         description="Shifts the time series from your metrics query by "
-                        "the specified amount of time. This can help when comparing a "
-                        "time series across multiple time periods. Specified as a "
-                        "signed duration in milliseconds. Only applicable on 'metrics' "
-                        "queries.",
+                                    "the specified amount of time. This can help when comparing a "
+                                    "time series across multiple time periods. Specified as a "
+                                    "signed duration in milliseconds. Only applicable on 'metrics' "
+                                    "queries.",
                     ),
                     th.Property(
                         "schema",
