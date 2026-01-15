@@ -147,30 +147,8 @@ class SearchJobStream(SumoLogicStream):
                 self.timeshift,
             )
             metrics_data = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            # Flatten metric dimensions to top level and add custom columns
-            for metric in metrics_data:
-                flattened_record = {}
-
-                # Extract and flatten dimensions from metricDefinition
-                if "metricDefinition" in metric and metric["metricDefinition"]:
-                    metric_def = metric["metricDefinition"]
-
-                    # Add dimensions as top-level fields
-                    if "dimensions" in metric_def:
-                        for dimension in metric_def["dimensions"]:
-                            dim_key = dimension.get("key", "")
-                            dim_value = dimension.get("value", "")
-                            if dim_key:
-                                # Use lowercase for dimension keys to match Snowflake expectations
-                                flattened_record[dim_key.lower()] = dim_value
-
-                # Keep the full metric structure
-                flattened_record.update(metric)
-
-                # Add custom columns
-                flattened_record.update(custom_columns)
-
-                records.append(flattened_record)
+            # Add custom columns to each metric
+            records = [{**metric, **custom_columns} for metric in metrics_data]
 
         for row in records:
             yield row
