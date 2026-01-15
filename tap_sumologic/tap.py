@@ -283,43 +283,13 @@ class TapSumoLogic(Tap):
             }
 
         elif table_config["query_type"] == "metrics":
-            # Extract dimension keys from sample metric data
-            dimension_keys = []
-            if fields and len(fields) > 0:
-                sample_metric = fields[0]
-                if "metricDefinition" in sample_metric and sample_metric["metricDefinition"]:
-                    dimensions = sample_metric["metricDefinition"].get("dimensions", [])
-                    for dimension in dimensions:
-                        dim_key = dimension.get("key", "")
-                        if dim_key:
-                            # Use lowercase to match the flattening logic in streams.py
-                            dimension_keys.append(dim_key.lower())
-
-            # Build schema with both nested and flattened properties
-            properties = {
-                "metricDefinition": {"type": ["object", "null"]},
-                "points": {"type": ["object", "null"]},
-            }
-
-            # Add flattened dimension keys as top-level properties
-            for dim_key in dimension_keys:
-                properties[dim_key] = {"type": ["string", "null"]}
-
-            # Add custom columns to schema
-            properties["start_date"] = {"type": ["string", "null"]}
-            properties["end_date"] = {"type": ["string", "null"]}
-            properties["time_zone"] = {"type": ["string", "null"]}
-            properties["_SDC_EXTRACTED_AT"] = {"type": ["string", "null"]}
-            properties["_SDC_BATCHED_AT"] = {"type": ["string", "null"]}
-            properties["_SDC_DELETED_AT"] = {"type": ["string", "null"]}
-
-            # Use flattened dimensions + start_date as key properties
-            key_properties = dimension_keys + ["start_date"]
-
             return {
                 "type": "object",
-                "properties": properties,
-                "key_properties": key_properties,
+                "properties": {
+                    "metricDefinition": {"type": ["object", "null"]},
+                    "points": {"type": ["object", "null"]},
+                },
+                "key_properties": ["metricDefinition", "points"],
             }
 
         return {}
