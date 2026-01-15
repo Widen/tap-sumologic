@@ -41,10 +41,10 @@ class TapSumoLogic(Tap):
             "start_date",
             th.DateTimeType,
             default=(
-                    datetime.datetime.today() - datetime.timedelta(days=1)  # type: ignore
+                datetime.datetime.today() - datetime.timedelta(days=1)  # type: ignore
             ).isoformat(),
             description="The earliest record date to sync. Sets the `from` parameter "
-                        "for all queries. Format: YYYY-MM-DDTHH:mm:ss",
+            "for all queries. Format: YYYY-MM-DDTHH:mm:ss",
         ),
         th.Property(
             "end_date",
@@ -150,10 +150,10 @@ class TapSumoLogic(Tap):
                         ),
                         required=False,
                         description="A valid Singer schema or a path-like string "
-                                    "that provides the path to a `.json` file that "
-                                    "contains a valid Singer schema. If provided, "
-                                    "the schema will not be inferred "
-                                    "from the results of an api call.",
+                        "that provides the path to a `.json` file that "
+                        "contains a valid Singer schema. If provided, "
+                        "the schema will not be inferred "
+                        "from the results of an api call.",
                     ),
                 )
             ),
@@ -287,7 +287,10 @@ class TapSumoLogic(Tap):
             dimension_keys = []
             if fields and len(fields) > 0:
                 sample_metric = fields[0]
-                if "metricDefinition" in sample_metric and sample_metric["metricDefinition"]:
+                if (
+                    "metricDefinition" in sample_metric
+                    and sample_metric["metricDefinition"]
+                ):
                     dimensions = sample_metric["metricDefinition"].get("dimensions", [])
                     for dimension in dimensions:
                         dim_key = dimension.get("key", "")
