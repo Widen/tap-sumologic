@@ -304,11 +304,12 @@ class TapSumoLogic(Tap):
             }
 
             # Add flattened dimension keys as top-level properties
+            # Make them non-nullable strings so target-snowflake creates columns
             for dim_key in dimension_keys:
-                properties[dim_key] = {"type": ["string", "null"]}
+                properties[dim_key] = {"type": "string"}
 
-            # Add custom columns to schema
-            properties["start_date"] = {"type": ["string", "null"]}
+            # Add custom columns to schema as non-nullable
+            properties["start_date"] = {"type": "string"}
             properties["end_date"] = {"type": ["string", "null"]}
             properties["time_zone"] = {"type": ["string", "null"]}
 
@@ -317,10 +318,16 @@ class TapSumoLogic(Tap):
             # in MERGE statements
             key_properties = dimension_keys + ["start_date"] if dimension_keys else []
 
-            return {
+            schema_result = {
                 "type": "object",
                 "properties": properties,
                 "key_properties": key_properties,
             }
+
+            # Log the schema for debugging
+            self.logger.info(f"Generated metrics schema with properties: {list(properties.keys())}")
+            self.logger.info(f"Key properties: {key_properties}")
+
+            return schema_result
 
         return {}

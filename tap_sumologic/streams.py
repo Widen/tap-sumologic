@@ -171,6 +171,10 @@ class SearchJobStream(SumoLogicStream):
                 # Add custom columns
                 flattened_record.update(custom_columns)
 
+                # Log first record to verify structure
+                if len(records) == 0:
+                    self.logger.info(f"First metric record keys: {list(flattened_record.keys())}")
+
                 records.append(flattened_record)
 
         for row in records:
