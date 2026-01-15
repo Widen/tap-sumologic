@@ -173,9 +173,7 @@ class SearchJobStream(SumoLogicStream):
 
                 # Log first record to verify structure
                 if len(records) == 0:
-                    self.logger.info(
-                        f"First metric record keys: {list(flattened_record.keys())}"
-                    )
+                    self.logger.info(f"First metric record keys: {list(flattened_record.keys())}")
 
                 records.append(flattened_record)
 
