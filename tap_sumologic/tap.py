@@ -207,7 +207,7 @@ class TapSumoLogic(Tap):
 
         return streams
 
-    def get_schema_for_table(self, table_config: Dict) -> Dict:  # noqa: C901
+    def get_schema_for_table(self, table_config: Dict) -> Dict:
         """Detect json schema using a record set of query.
 
         Args:

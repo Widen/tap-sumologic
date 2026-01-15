@@ -161,8 +161,7 @@ class SearchJobStream(SumoLogicStream):
                             dim_key = dimension.get("key", "")
                             dim_value = dimension.get("value", "")
                             if dim_key:
-                                # Use lowercase for dimension keys to match
-                                # Snowflake expectations
+                                # Use lowercase for dimension keys to match Snowflake expectations
                                 flattened_record[dim_key.lower()] = dim_value
 
                 # Keep the full metric structure
