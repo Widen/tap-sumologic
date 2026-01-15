@@ -325,7 +325,9 @@ class TapSumoLogic(Tap):
             }
 
             # Log the schema for debugging
-            self.logger.info(f"Generated metrics schema with properties: {list(properties.keys())}")
+            self.logger.info(
+                f"Generated metrics schema with properties: {list(properties.keys())}"
+            )
             self.logger.info(f"Key properties: {key_properties}")
 
             return schema_result
