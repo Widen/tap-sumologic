@@ -24,6 +24,7 @@ class SearchJobStream(SumoLogicStream):
         quantization: Optional[int] = None,
         rollup: Optional[str] = None,
         timeshift: Optional[int] = None,
+        query_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Class initialization.
 
@@ -40,6 +41,7 @@ class SearchJobStream(SumoLogicStream):
             quantization: see tap.py
             rollup: see tap.py
             timeshift: see tap.py
+            query_params: dictionary of parameters to substitute in the query.
 
         """
         super().__init__(tap=tap, schema=schema)
@@ -57,6 +59,25 @@ class SearchJobStream(SumoLogicStream):
         self.quantization = quantization
         self.rollup = rollup
         self.timeshift = timeshift
+        self.query_params = query_params or {}
+
+    def _get_resolved_query(self) -> str:
+        """Resolve query parameters and return the final query string.
+
+        Substitutes {param_name} placeholders in the query with values
+        from query_params dictionary.
+
+        Returns:
+            The query string with all parameters substituted.
+
+        """
+        resolved_query = self.query
+        if self.query_params:
+            for param_name, param_value in self.query_params.items():
+                placeholder = "{" + param_name + "}"
+                resolved_query = resolved_query.replace(placeholder, str(param_value))
+            self.logger.info(f"Resolved query with params: {resolved_query}")
+        return resolved_query
 
     def get_records(  # noqa: C901
         self, context: Optional[Mapping[str, Any]]
@@ -72,6 +93,9 @@ class SearchJobStream(SumoLogicStream):
         records = []
         limit = 10000
 
+        # Get the resolved query with parameters substituted
+        resolved_query = self._get_resolved_query()
+
         now_datetime = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
         custom_columns = {
             "start_date": self.config["start_date"],
@@ -85,7 +109,7 @@ class SearchJobStream(SumoLogicStream):
         if self.query_type in ["messages", "records"]:
             delay = 5
             search_job = self.conn.search_job(
-                self.query,
+                resolved_query,
                 self.config["start_date"],
                 self.config["end_date"],
                 self.config["time_zone"],
@@ -139,7 +163,7 @@ class SearchJobStream(SumoLogicStream):
 
         elif self.query_type == "metrics":
             response = self.conn.metrics_query(
-                self.query,
+                resolved_query,
                 self.config["start_date"],
                 self.config["end_date"],
                 self.quantization,

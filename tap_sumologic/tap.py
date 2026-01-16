@@ -138,6 +138,16 @@ class TapSumoLogic(Tap):
                         "queries.",
                     ),
                     th.Property(
+                        "query_params",
+                        th.ObjectType(),
+                        required=False,
+                        description="A dictionary of query parameters to substitute "
+                        "in the query string. Parameters in the query should be "
+                        "specified as {param_name} and will be replaced with the "
+                        "corresponding value from this dictionary. "
+                        "Example: {'cluster_name': 'my-cluster'}",
+                    ),
+                    th.Property(
                         "schema",
                         th.CustomType(
                             {
@@ -202,6 +212,7 @@ class TapSumoLogic(Tap):
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
+                    query_params=stream.get("query_params"),
                 )
             )
 
