@@ -71,6 +71,8 @@ class SearchJobStream(SumoLogicStream):
             The query string with all parameters substituted.
 
         """
+        if self.query is None:
+            return ""
         resolved_query = self.query
         if self.query_params:
             for param_name, param_value in self.query_params.items():
@@ -157,7 +159,7 @@ class SearchJobStream(SumoLogicStream):
                                 "Waiting 5 seconds before next page "
                                 "to avoid rate limit..."
                             )
-                            time.sleep(5)
+                            time.sleep(delay)
                     else:
                         break  # make sure we exit if nothing comes back
 
