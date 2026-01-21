@@ -190,25 +190,30 @@ class TapSumoLogic(Tap):
                 self.logger.info("No schema found. Inferring schema from API call.")
                 schema = self.get_schema_for_table(stream)
 
-            if stream["query_type"] not in ("records", "messages", "metrics"):
+            query_type = stream.get("query_type", "messages")
+            if query_type not in ("records", "messages", "metrics"):
                 raise ValueError(
-                    f"Invalid query_type: {stream['query_type']}. "
-                    "Must be one of 'records' or 'messages'."
+                    f"Invalid query_type: {query_type}. "
+                    "Must be one of 'records', 'messages', or 'metrics'."
                 )
+
+            primary_keys = stream.get("primary_keys") or schema.get(
+                "key_properties", []
+            )
 
             streams.append(
                 SearchJobStream(
                     tap=self,
-                    name=stream["table_name"],
-                    query_type=stream["query_type"],
-                    primary_keys=stream["primary_keys"] or schema["key_properties"],
+                    name=stream.get("table_name", ""),
+                    query_type=query_type,
+                    primary_keys=primary_keys,
                     replication_key=stream.get(
                         "replication_key", self.config.get("replication_key", "")
                     ),
                     schema=schema,
-                    query=stream["query"],
-                    by_receipt_time=stream["by_receipt_time"],
-                    auto_parsing_mode=stream["auto_parsing_mode"],
+                    query=stream.get("query", ""),
+                    by_receipt_time=stream.get("by_receipt_time", False),
+                    auto_parsing_mode=stream.get("auto_parsing_mode", "intelligent"),
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
@@ -229,8 +234,9 @@ class TapSumoLogic(Tap):
 
         """
         schema = {}
-        q: str = table_config["query"]
-        if table_config["query_type"] in ("records", "messages"):
+        q: str = table_config.get("query", "")
+        query_type = table_config.get("query_type", "messages")
+        if query_type in ("records", "messages"):
             q += " | limit 1"
         start_date = self.config["start_date"]
         end_date = self.config["end_date"]
@@ -247,15 +253,15 @@ class TapSumoLogic(Tap):
             start_date,
             end_date,
             time_zone,
-            table_config["by_receipt_time"],
-            table_config["auto_parsing_mode"],
-            table_config["query_type"],
+            table_config.get("by_receipt_time", False),
+            table_config.get("auto_parsing_mode", "intelligent"),
+            query_type,
             table_config.get("quantization"),
             table_config.get("rollup"),
             table_config.get("timeshift"),
         )
 
-        if table_config["query_type"] in ("records", "messages"):
+        if query_type in ("records", "messages"):
             key_properties = []
             for field in fields:
                 field_name = field["name"]
@@ -284,7 +290,7 @@ class TapSumoLogic(Tap):
             schema["end_date"] = base_type
             schema["time_zone"] = base_type
             key_properties += ["start_date", "end_date", "time_zone"]
-            if table_config["query_type"] == "messages":
+            if query_type == "messages":
                 key_properties += ["_messagetime", "_messageid"]
 
             return {
@@ -293,7 +299,7 @@ class TapSumoLogic(Tap):
                 "key_properties": key_properties,
             }
 
-        elif table_config["query_type"] == "metrics":
+        elif query_type == "metrics":
             return {
                 "type": "object",
                 "properties": {

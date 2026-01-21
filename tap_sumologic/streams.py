@@ -1,8 +1,9 @@
 """Stream type classes for tap-sumologic."""
 
+import json
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional, Union
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -24,7 +25,7 @@ class SearchJobStream(SumoLogicStream):
         quantization: Optional[int] = None,
         rollup: Optional[str] = None,
         timeshift: Optional[int] = None,
-        query_params: Optional[Dict[str, Any]] = None,
+        query_params: Optional[Union[Dict[str, Any], str]] = None,
     ) -> None:
         """Class initialization.
 
@@ -42,6 +43,7 @@ class SearchJobStream(SumoLogicStream):
             rollup: see tap.py
             timeshift: see tap.py
             query_params: dictionary of parameters to substitute in the query.
+                Can be a dict or a JSON string.
 
         """
         super().__init__(tap=tap, schema=schema)
@@ -59,7 +61,34 @@ class SearchJobStream(SumoLogicStream):
         self.quantization = quantization
         self.rollup = rollup
         self.timeshift = timeshift
-        self.query_params = query_params or {}
+        self.query_params = self._parse_query_params(query_params)
+
+    def _parse_query_params(
+        self, query_params: Optional[Union[Dict[str, Any], str]]
+    ) -> Dict[str, Any]:
+        """Parse query_params, handling both dict and JSON string formats.
+
+        Args:
+            query_params: Query parameters as dict or JSON string.
+
+        Returns:
+            Parsed query parameters as a dictionary.
+
+        """
+        if query_params is None:
+            return {}
+        if isinstance(query_params, dict):
+            return query_params
+        if isinstance(query_params, str):
+            try:
+                parsed = json.loads(query_params)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                self.logger.warning(
+                    f"Failed to parse query_params as JSON: {query_params}"
+                )
+        return {}
 
     def _get_resolved_query(self) -> str:
         """Resolve query parameters and return the final query string.
