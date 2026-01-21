@@ -275,6 +275,25 @@ class TapSumoLogic(Tap):
 
         return merged_query_params
 
+    def _resolve_query(self, query: str, query_params: Dict) -> str:
+        """Resolve query by substituting parameter placeholders.
+
+        Args:
+            query: Query string with {param_name} placeholders.
+            query_params: Dictionary of parameter values.
+
+        Returns:
+            Query string with parameters substituted.
+
+        """
+        if not query_params:
+            return query
+        resolved_query = query
+        for param_name, param_value in query_params.items():
+            placeholder = "{" + param_name + "}"
+            resolved_query = resolved_query.replace(placeholder, str(param_value))
+        return resolved_query
+
     def discover_streams(self) -> List[SearchJobStream]:  # noqa: C901
         """Return a list of discovered streams."""
         streams = []
@@ -330,6 +349,11 @@ class TapSumoLogic(Tap):
         schema = {}
         q: str = table_config.get("query", "")
         query_type = table_config.get("query_type", "messages")
+
+        # Resolve query parameters before making API call
+        merged_params = self._merge_query_params(table_config)
+        q = self._resolve_query(q, merged_params)
+
         if query_type in ("records", "messages"):
             q += " | limit 1"
         start_date = self.config["start_date"]
