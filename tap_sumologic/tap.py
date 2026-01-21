@@ -173,7 +173,19 @@ class TapSumoLogic(Tap):
     def discover_streams(self) -> List[SearchJobStream]:  # type: ignore
         """Return a list of discovered streams."""
         streams = []
-        for stream in self.config["tables"]:
+        tables_config = self.config["tables"]
+
+        # Handle tables config passed as JSON string (e.g., from environment variable)
+        if isinstance(tables_config, str):
+            try:
+                tables_config = json.loads(tables_config)
+            except json.JSONDecodeError:
+                self.logger.error(
+                    f"Failed to parse tables config as JSON: {tables_config}"
+                )
+                raise ValueError("tables config must be a valid JSON array")
+
+        for stream in tables_config:
             schema_config = stream.get("schema")
             if isinstance(schema_config, str):
                 self.logger.info("Found path to a schema, not doing discovery.")
