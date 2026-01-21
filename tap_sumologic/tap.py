@@ -61,6 +61,17 @@ class TapSumoLogic(Tap):
             "parameter for all queries",
         ),
         th.Property(
+            "query_params",
+            th.ObjectType(),
+            required=False,
+            description="A dictionary of query parameters to substitute "
+            "in the query string for ALL tables. Parameters in the query should be "
+            "specified as {param_name} and will be replaced with the "
+            "corresponding value from this dictionary. This is merged with "
+            "table-level query_params (table-level takes precedence). "
+            "Example: {'cluster_name': 'my-cluster'}",
+        ),
+        th.Property(
             "tables",
             required=True,
             description="The list of configs for each table/query/stream.",
@@ -213,6 +224,29 @@ class TapSumoLogic(Tap):
                 "key_properties", []
             )
 
+            # Merge top-level query_params with table-level query_params
+            # Table-level takes precedence over top-level
+            merged_query_params = {}
+
+            # Get top-level query_params (can be dict or JSON string from env var)
+            top_level_params = self.config.get("query_params", {})
+            if isinstance(top_level_params, str):
+                try:
+                    top_level_params = json.loads(top_level_params)
+                except json.JSONDecodeError:
+                    self.logger.warning(
+                        f"Failed to parse top-level query_params as JSON: {top_level_params}"
+                    )
+                    top_level_params = {}
+
+            if isinstance(top_level_params, dict):
+                merged_query_params.update(top_level_params)
+
+            # Get table-level query_params and merge (takes precedence)
+            table_params = stream.get("query_params", {})
+            if isinstance(table_params, dict):
+                merged_query_params.update(table_params)
+
             streams.append(
                 SearchJobStream(
                     tap=self,
@@ -229,10 +263,9 @@ class TapSumoLogic(Tap):
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
-                    query_params=stream.get("query_params"),
+                    query_params=merged_query_params if merged_query_params else None,
                 )
             )
-
         return streams
 
     def get_schema_for_table(self, table_config: Dict) -> Dict:
