@@ -181,37 +181,107 @@ class TapSumoLogic(Tap):
         ),
     ).to_dict()
 
-    def discover_streams(self) -> List[SearchJobStream]:  # type: ignore
-        """Return a list of discovered streams."""
-        streams = []
-        tables_config = self.config["tables"]
+    def _parse_tables_config(self, tables_config):
+        """Parse tables config, handling JSON string format.
 
-        # Handle tables config passed as JSON string (e.g., from environment variable)
+        Args:
+            tables_config: Tables configuration (list or JSON string).
+
+        Returns:
+            Parsed tables configuration as a list.
+
+        """
         if isinstance(tables_config, str):
             try:
-                tables_config = json.loads(tables_config)
+                return json.loads(tables_config)
             except json.JSONDecodeError:
                 self.logger.error(
                     f"Failed to parse tables config as JSON: {tables_config}"
                 )
                 raise ValueError("tables config must be a valid JSON array")
+        return tables_config
+
+    def _parse_json_params(self, params, param_name: str = "params") -> Dict:
+        """Parse parameters that may be dict or JSON string.
+
+        Args:
+            params: Parameters as dict or JSON string.
+            param_name: Name for logging purposes.
+
+        Returns:
+            Parsed parameters as a dictionary.
+
+        """
+        if params is None:
+            return {}
+        if isinstance(params, dict):
+            return params
+        if isinstance(params, str):
+            try:
+                parsed = json.loads(params)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                self.logger.warning(f"Failed to parse {param_name} as JSON: {params}")
+        return {}
+
+    def _get_schema_for_stream(self, stream: Dict) -> Dict:
+        """Get schema for a stream from config or by inference.
+
+        Args:
+            stream: Stream configuration dictionary.
+
+        Returns:
+            Schema dictionary.
+
+        """
+        schema_config = stream.get("schema")
+        if isinstance(schema_config, str):
+            self.logger.info("Found path to a schema, not doing discovery.")
+            with open(schema_config, "r") as f:
+                return json.load(f)
+        elif isinstance(schema_config, dict):
+            self.logger.info("Found schema in config, not doing discovery.")
+            builder = SchemaBuilder()
+            builder.add_schema(schema_config)
+            return builder.to_schema()
+        else:
+            self.logger.info("No schema found. Inferring schema from API call.")
+            return self.get_schema_for_table(stream)
+
+    def _merge_query_params(self, stream: Dict) -> Dict:
+        """Merge top-level and table-level query params.
+
+        Args:
+            stream: Stream configuration dictionary.
+
+        Returns:
+            Merged query parameters dictionary.
+
+        """
+        merged_query_params = {}
+
+        # Get top-level query_params
+        top_level_params = self._parse_json_params(
+            self.config.get("query_params", {}), "top-level query_params"
+        )
+        merged_query_params.update(top_level_params)
+
+        # Get table-level query_params (takes precedence)
+        table_params = self._parse_json_params(
+            stream.get("query_params", {}), "table-level query_params"
+        )
+        merged_query_params.update(table_params)
+
+        return merged_query_params
+
+    def discover_streams(self) -> List[SearchJobStream]:  # noqa: C901
+        """Return a list of discovered streams."""
+        streams = []
+        tables_config = self._parse_tables_config(self.config["tables"])
 
         for stream in tables_config:
-            schema_config = stream.get("schema")
-            if isinstance(schema_config, str):
-                self.logger.info("Found path to a schema, not doing discovery.")
-                with open(schema_config, "r") as f:
-                    schema = json.load(f)
-
-            elif isinstance(schema_config, dict):
-                self.logger.info("Found schema in config, not doing discovery.")
-                builder = SchemaBuilder()
-                builder.add_schema(schema_config)
-                schema = builder.to_schema()
-
-            else:
-                self.logger.info("No schema found. Inferring schema from API call.")
-                schema = self.get_schema_for_table(stream)
+            schema = self._get_schema_for_stream(stream)
 
             query_type = stream.get("query_type", "messages")
             if query_type not in ("records", "messages", "metrics"):
@@ -224,28 +294,7 @@ class TapSumoLogic(Tap):
                 "key_properties", []
             )
 
-            # Merge top-level query_params with table-level query_params
-            # Table-level takes precedence over top-level
-            merged_query_params = {}
-
-            # Get top-level query_params (can be dict or JSON string from env var)
-            top_level_params = self.config.get("query_params", {})
-            if isinstance(top_level_params, str):
-                try:
-                    top_level_params = json.loads(top_level_params)
-                except json.JSONDecodeError:
-                    self.logger.warning(
-                        f"Failed to parse top-level query_params as JSON: {top_level_params}"
-                    )
-                    top_level_params = {}
-
-            if isinstance(top_level_params, dict):
-                merged_query_params.update(top_level_params)
-
-            # Get table-level query_params and merge (takes precedence)
-            table_params = stream.get("query_params", {})
-            if isinstance(table_params, dict):
-                merged_query_params.update(table_params)
+            merged_query_params = self._merge_query_params(stream)
 
             streams.append(
                 SearchJobStream(
