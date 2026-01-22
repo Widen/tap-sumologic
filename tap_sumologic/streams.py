@@ -101,13 +101,27 @@ class SearchJobStream(SumoLogicStream):
 
         """
         if self.query is None:
+            self.logger.warning("Query is None, returning empty string")
             return ""
+
+        self.logger.info(f"Original query: {self.query}")
+        self.logger.info(f"Query params available: {self.query_params}")
+
         resolved_query = self.query
         if self.query_params:
             for param_name, param_value in self.query_params.items():
                 placeholder = "{" + param_name + "}"
-                resolved_query = resolved_query.replace(placeholder, str(param_value))
-            self.logger.info(f"Resolved query with params: {resolved_query}")
+                if placeholder in resolved_query:
+                    self.logger.debug(f"Substituting {placeholder} -> {param_value}")
+                    resolved_query = resolved_query.replace(
+                        placeholder, str(param_value)
+                    )
+                else:
+                    self.logger.warning(f"Placeholder {placeholder} not found in query")
+            self.logger.info(f"Resolved query after substitution: {resolved_query}")
+        else:
+            self.logger.info("No query_params to substitute, using original query")
+
         return resolved_query
 
     def get_records(  # noqa: C901
@@ -119,13 +133,17 @@ class SearchJobStream(SumoLogicStream):
         stream if partitioning is required for the stream. Most implementations do not
         require partitioning and should ignore the `context` argument.
         """
-        self.logger.info("Running query in sumologic to get records")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Starting get_records for stream: {self.name}")
+        self.logger.info(f"Query type: {self.query_type}")
+        self.logger.info("=" * 60)
 
         records = []
         limit = 10000
 
         # Get the resolved query with parameters substituted
         resolved_query = self._get_resolved_query()
+        self.logger.info(f"Final query to execute: {resolved_query}")
 
         now_datetime = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
         custom_columns = {
@@ -193,6 +211,16 @@ class SearchJobStream(SumoLogicStream):
                         break  # make sure we exit if nothing comes back
 
         elif self.query_type == "metrics":
+            self.logger.info("-" * 40)
+            self.logger.info("Executing METRICS query")
+            self.logger.info(f"Query: {resolved_query}")
+            self.logger.info(f"Start date: {self.config['start_date']}")
+            self.logger.info(f"End date: {self.config['end_date']}")
+            self.logger.info(f"Quantization: {self.quantization}")
+            self.logger.info(f"Rollup: {self.rollup}")
+            self.logger.info(f"Timeshift: {self.timeshift}")
+            self.logger.info("-" * 40)
+
             response = self.conn.metrics_query(
                 resolved_query,
                 self.config["start_date"],
@@ -201,9 +229,12 @@ class SearchJobStream(SumoLogicStream):
                 self.rollup,
                 self.timeshift,
             )
+            self.logger.info("Metrics query executed successfully")
             metrics_data = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
+            self.logger.info(f"Retrieved {len(metrics_data)} time series")
             # Add custom columns to each metric
             records = [{**metric, **custom_columns} for metric in metrics_data]
 
+        self.logger.info(f"Total records to yield: {len(records)}")
         for row in records:
             yield row
