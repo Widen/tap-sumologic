@@ -237,7 +237,8 @@ class TapSumoLogic(Tap):
                 parsed = json.loads(params)
                 if isinstance(parsed, dict):
                     self.logger.debug(
-                        f"{param_name}: parsed successfully with keys: {list(parsed.keys())}"
+                        f"{param_name}: parsed successfully "
+                        f"with keys: {list(parsed.keys())}"
                     )
                     return parsed
             except json.JSONDecodeError:
@@ -294,11 +295,13 @@ class TapSumoLogic(Tap):
             f"Raw query_params - top-level: {raw_top_level} "
             f"(type: {type(raw_top_level).__name__}), "
             f"table-level: {raw_table_level} "
-            f"(type: {type(raw_table_level).__name__ if raw_table_level else 'None'})"
+            f"(type: "
+            f"{type(raw_table_level).__name__ if raw_table_level else 'None'})"
         )
 
         # Get top-level query_params from self.config
-        # This includes the value from environment variable (which overrides meltano.yml)
+        # This includes the value from environment variable
+        # (which overrides meltano.yml)
         top_level_params = self._parse_json_params(
             self.config.get("query_params", {}), "top-level query_params"
         )
