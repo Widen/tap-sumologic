@@ -285,12 +285,12 @@ class SearchJobStream(SumoLogicStream):
                 raise
 
         self.logger.info("#" * 80)
-        self.logger.info(f"YIELDING RECORDS TO LOADER")
+        self.logger.info("YIELDING RECORDS TO LOADER")
         self.logger.info(f"Total records prepared: {len(records)}")
         self.logger.info("#" * 80)
 
         if records:
-            self.logger.info(f"Sample record (first):")
+            self.logger.info("Sample record (first):")
             self.logger.info(f"{records[0]}")
         else:
             self.logger.warning("⚠ No records to yield! Query returned empty result.")
