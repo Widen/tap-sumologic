@@ -338,11 +338,6 @@ class TapSumoLogic(Tap):
             self.logger.warning(
                 "No query_params found (both top-level and table-level are empty)"
             )
-            self.logger.info(f"Final merged query_params: {merged_query_params}")
-        else:
-            self.logger.warning(
-                "No query_params found (both top-level and table-level are empty)"
-            )
 
         return merged_query_params
 
