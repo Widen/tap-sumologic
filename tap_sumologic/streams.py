@@ -63,6 +63,15 @@ class SearchJobStream(SumoLogicStream):
         self.timeshift = timeshift
         self.query_params = self._parse_query_params(query_params)
 
+        # Log stream initialization with query details
+        self.logger.info("=" * 80)
+        self.logger.info(f"INITIALIZING STREAM: {self.name}")
+        self.logger.info(f"Query type: {self.query_type}")
+        self.logger.info(f"Original query template: {self.query}")
+        self.logger.info(f"Query params (raw): {query_params}")
+        self.logger.info(f"Query params (parsed): {self.query_params}")
+        self.logger.info("=" * 80)
+
     def _parse_query_params(
         self, query_params: Optional[Union[Dict[str, Any], str]]
     ) -> Dict[str, Any]:
@@ -104,23 +113,33 @@ class SearchJobStream(SumoLogicStream):
             self.logger.warning("Query is None, returning empty string")
             return ""
 
-        self.logger.info(f"Original query: {self.query}")
-        self.logger.info(f"Query params available: {self.query_params}")
+        self.logger.info("*" * 80)
+        self.logger.info("QUERY RESOLUTION STARTING")
+        self.logger.info(f"Original query template: {self.query}")
+        self.logger.info(f"Query params to substitute: {self.query_params}")
+        self.logger.info("*" * 80)
 
         resolved_query = self.query
         if self.query_params:
             for param_name, param_value in self.query_params.items():
                 placeholder = "{" + param_name + "}"
                 if placeholder in resolved_query:
-                    self.logger.debug(f"Substituting {placeholder} -> {param_value}")
+                    self.logger.info(f"✓ Substituting {placeholder} -> '{param_value}'")
                     resolved_query = resolved_query.replace(
                         placeholder, str(param_value)
                     )
                 else:
-                    self.logger.warning(f"Placeholder {placeholder} not found in query")
-            self.logger.info(f"Resolved query after substitution: {resolved_query}")
+                    self.logger.warning(
+                        f"✗ Placeholder {placeholder} NOT FOUND in query!"
+                    )
+
+            self.logger.info("*" * 80)
+            self.logger.info("QUERY RESOLUTION COMPLETED")
+            self.logger.info(f"Final resolved query: {resolved_query}")
+            self.logger.info("*" * 80)
         else:
-            self.logger.info("No query_params to substitute, using original query")
+            self.logger.warning("No query_params provided - using original query as-is")
+            self.logger.info(f"Query to execute: {resolved_query}")
 
         return resolved_query
 
@@ -211,17 +230,21 @@ class SearchJobStream(SumoLogicStream):
                         break  # make sure we exit if nothing comes back
 
         elif self.query_type == "metrics":
-            self.logger.info("-" * 40)
-            self.logger.info("Executing METRICS query")
-            self.logger.info(f"Query: {resolved_query}")
+            self.logger.info("#" * 80)
+            self.logger.info("EXECUTING METRICS QUERY")
+            self.logger.info("#" * 80)
+            self.logger.info(f"Stream name: {self.name}")
+            self.logger.info(f"Resolved query: {resolved_query}")
             self.logger.info(f"Start date: {self.config['start_date']}")
             self.logger.info(f"End date: {self.config['end_date']}")
+            self.logger.info(f"Time zone: {self.config.get('time_zone', 'UTC')}")
             self.logger.info(f"Quantization: {self.quantization}")
             self.logger.info(f"Rollup: {self.rollup}")
             self.logger.info(f"Timeshift: {self.timeshift}")
-            self.logger.info("-" * 40)
+            self.logger.info("#" * 80)
 
             try:
+                self.logger.info("Sending query to Sumo Logic API...")
                 response = self.conn.metrics_query(
                     resolved_query,
                     self.config["start_date"],
@@ -230,38 +253,53 @@ class SearchJobStream(SumoLogicStream):
                     self.rollup,
                     self.timeshift,
                 )
-                self.logger.info("Metrics query executed successfully")
+                self.logger.info("✓ Metrics query executed successfully")
 
                 # Check for errors in response
                 if "errors" in response and response["errors"].get("errors"):
                     error_msg = response["errors"]
-                    self.logger.error(f"Sumo Logic API returned errors: {error_msg}")
+                    self.logger.error(f"✗ Sumo Logic API returned errors: {error_msg}")
                     raise Exception(f"Metrics query error: {error_msg}")
 
                 metrics_data = response["queryResult"][0]["timeSeriesList"][
                     "timeSeries"
                 ]
-                self.logger.info(f"Retrieved {len(metrics_data)} time series")
+                self.logger.info(
+                    f"✓ Retrieved {len(metrics_data)} time series from Sumo Logic"
+                )
 
                 # Add custom columns to each metric
                 records = [{**metric, **custom_columns} for metric in metrics_data]
+                self.logger.info(
+                    f"✓ Prepared {len(records)} records with custom columns"
+                )
 
             except KeyError as e:
-                self.logger.error(f"Unexpected response structure from Sumo Logic: {e}")
-                self.logger.error(f"Response: {response}")
+                self.logger.error(
+                    f"✗ Unexpected response structure from Sumo Logic: {e}"
+                )
+                self.logger.error(f"Response received: {response}")
                 raise
             except Exception as e:
-                self.logger.error(f"Error executing metrics query: {e}")
+                self.logger.error(f"✗ Error executing metrics query: {e}")
                 raise
 
-        self.logger.info(f"Total records to yield: {len(records)}")
+        self.logger.info("#" * 80)
+        self.logger.info(f"YIELDING RECORDS TO LOADER")
+        self.logger.info(f"Total records prepared: {len(records)}")
+        self.logger.info("#" * 80)
+
         if records:
-            self.logger.debug(f"Sample record (first): {records[0]}")
+            self.logger.info(f"Sample record (first):")
+            self.logger.info(f"{records[0]}")
+        else:
+            self.logger.warning("⚠ No records to yield! Query returned empty result.")
 
         record_count = 0
         for row in records:
             record_count += 1
             yield row
 
-        self.logger.info(f"Successfully yielded {record_count} records")
-        self.logger.info("=" * 60)
+        self.logger.info("#" * 80)
+        self.logger.info(f"✓ Successfully yielded {record_count} records to loader")
+        self.logger.info("#" * 80)
