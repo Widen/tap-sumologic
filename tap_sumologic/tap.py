@@ -291,6 +291,10 @@ class TapSumoLogic(Tap):
         # Log raw config values for debugging
         raw_top_level = self.config.get("query_params")
         raw_table_level = stream.get("query_params")
+
+        self.logger.info("=" * 80)
+        self.logger.info("MERGING QUERY PARAMS")
+        self.logger.info("=" * 80)
         self.logger.debug(
             f"Raw query_params - top-level: {raw_top_level} "
             f"(type: {type(raw_top_level).__name__}), "
@@ -306,18 +310,34 @@ class TapSumoLogic(Tap):
             self.config.get("query_params", {}), "top-level query_params"
         )
         if top_level_params:
-            self.logger.info(f"Top-level query_params: {top_level_params}")
-        merged_query_params.update(top_level_params)
+            self.logger.info(f"Step 1: Top-level query_params: {top_level_params}")
+            merged_query_params.update(top_level_params)
+            self.logger.info(f"After step 1, merged: {merged_query_params}")
+        else:
+            self.logger.info("Step 1: No top-level query_params found")
 
         # Get table-level query_params (takes precedence)
         table_params = self._parse_json_params(
             stream.get("query_params", {}), "table-level query_params"
         )
         if table_params:
-            self.logger.info(f"Table-level query_params: {table_params}")
-        merged_query_params.update(table_params)
+            self.logger.info(
+                f"Step 2: Table-level query_params: {table_params} "
+                "(will override top-level)"
+            )
+            merged_query_params.update(table_params)
+            self.logger.info(f"After step 2, merged: {merged_query_params}")
+        else:
+            self.logger.info("Step 2: No table-level query_params found")
 
         if merged_query_params:
+            self.logger.info("=" * 80)
+            self.logger.info(f"FINAL MERGED query_params: {merged_query_params}")
+            self.logger.info("=" * 80)
+        else:
+            self.logger.warning(
+                "No query_params found (both top-level and table-level are empty)"
+            )
             self.logger.info(f"Final merged query_params: {merged_query_params}")
         else:
             self.logger.warning(
