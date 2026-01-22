@@ -378,6 +378,9 @@ class TapSumoLogic(Tap):
         self.logger.info("=" * 60)
         self.logger.info("Starting stream discovery")
         self.logger.info("=" * 60)
+        self.logger.info(
+            "TAP-SUMOLOGIC VERSION: This version supports query_params substitution"
+        )
 
         # Log important config values for debugging
         self.logger.info(f"Config start_date: {self.config.get('start_date')}")
@@ -398,6 +401,19 @@ class TapSumoLogic(Tap):
             self.logger.info(f"Table name: {stream.get('table_name')}")
             self.logger.info(f"Query type: {stream.get('query_type', 'messages')}")
             self.logger.info(f"Original query: {stream.get('query')}")
+
+            # Check if query has placeholders
+            query_template = stream.get("query", "")
+            if "{" in query_template and "}" in query_template:
+                self.logger.info(
+                    "✓ Query contains placeholders - will be resolved at runtime"
+                )
+            else:
+                self.logger.warning(
+                    "⚠ Query does NOT contain placeholders - "
+                    "query_params will have no effect"
+                )
+
             self.logger.debug(f"Stream config: {stream}")
 
             schema = self._get_schema_for_stream(stream)
