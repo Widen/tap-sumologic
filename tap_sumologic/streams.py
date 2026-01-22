@@ -221,20 +221,47 @@ class SearchJobStream(SumoLogicStream):
             self.logger.info(f"Timeshift: {self.timeshift}")
             self.logger.info("-" * 40)
 
-            response = self.conn.metrics_query(
-                resolved_query,
-                self.config["start_date"],
-                self.config["end_date"],
-                self.quantization,
-                self.rollup,
-                self.timeshift,
-            )
-            self.logger.info("Metrics query executed successfully")
-            metrics_data = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            self.logger.info(f"Retrieved {len(metrics_data)} time series")
-            # Add custom columns to each metric
-            records = [{**metric, **custom_columns} for metric in metrics_data]
+            try:
+                response = self.conn.metrics_query(
+                    resolved_query,
+                    self.config["start_date"],
+                    self.config["end_date"],
+                    self.quantization,
+                    self.rollup,
+                    self.timeshift,
+                )
+                self.logger.info("Metrics query executed successfully")
+
+                # Check for errors in response
+                if "errors" in response and response["errors"].get("errors"):
+                    error_msg = response["errors"]
+                    self.logger.error(f"Sumo Logic API returned errors: {error_msg}")
+                    raise Exception(f"Metrics query error: {error_msg}")
+
+                metrics_data = response["queryResult"][0]["timeSeriesList"][
+                    "timeSeries"
+                ]
+                self.logger.info(f"Retrieved {len(metrics_data)} time series")
+
+                # Add custom columns to each metric
+                records = [{**metric, **custom_columns} for metric in metrics_data]
+
+            except KeyError as e:
+                self.logger.error(f"Unexpected response structure from Sumo Logic: {e}")
+                self.logger.error(f"Response: {response}")
+                raise
+            except Exception as e:
+                self.logger.error(f"Error executing metrics query: {e}")
+                raise
 
         self.logger.info(f"Total records to yield: {len(records)}")
+        if records:
+            self.logger.debug(f"Sample record (first): {records[0]}")
+
+        record_count = 0
         for row in records:
+            record_count += 1
             yield row
+
+        self.logger.info(f"Successfully yielded {record_count} records")
+        self.logger.info("=" * 60)
