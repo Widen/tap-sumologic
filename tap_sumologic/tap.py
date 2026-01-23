@@ -457,6 +457,76 @@ class TapSumoLogic(Tap):
         self.logger.info("=" * 60)
         return streams
 
+    def _get_metrics_schema(self, table_config: Dict) -> Dict:
+        """Get predefined schema for metrics queries.
+
+        Args:
+            table_config: Table configuration dictionary.
+
+        Returns:
+            Schema dictionary for metrics.
+
+        """
+        self.logger.info("Using predefined schema for metrics query.")
+        user_primary_keys = table_config.get("primary_keys", [])
+        if user_primary_keys:
+            self.logger.info(
+                f"Using user-provided primary_keys for metrics: {user_primary_keys}"
+            )
+        return {
+            "type": "object",
+            "properties": {
+                "metricDefinition": {"type": ["object", "null"]},
+                "points": {"type": ["object", "null"]},
+            },
+            "key_properties": user_primary_keys if user_primary_keys else [],
+        }
+
+    def _build_schema_from_fields(self, fields: List, query_type: str) -> Dict:
+        """Build schema from Sumo Logic fields.
+
+        Args:
+            fields: List of field definitions from Sumo Logic.
+            query_type: Type of query (records or messages).
+
+        Returns:
+            Schema dictionary.
+
+        """
+        schema: Dict[str, Any] = {}
+        key_properties: List[str] = []
+        base_type = {"type": ["null", "string"]}
+
+        for field in fields:
+            field_name = field["name"]
+            field_type = field["fieldType"]
+            key_field = field["keyField"]
+
+            schema[field_name] = copy.deepcopy(base_type)
+
+            if field_type in ("int", "long"):
+                schema[field_name]["type"].append("integer")
+            elif field_type == "double":
+                schema[field_name]["type"].append("number")
+
+            if key_field:
+                key_properties.append(field_name)
+
+        # Add start and end date
+        schema["start_date"] = base_type
+        schema["end_date"] = base_type
+        schema["time_zone"] = base_type
+        key_properties += ["start_date", "end_date", "time_zone"]
+
+        if query_type == "messages":
+            key_properties += ["_messagetime", "_messageid"]
+
+        return {
+            "type": "object",
+            "properties": schema,
+            "key_properties": key_properties,
+        }
+
     def get_schema_for_table(self, table_config: Dict) -> Dict:
         """Detect json schema using a record set of query.
 
@@ -467,7 +537,6 @@ class TapSumoLogic(Tap):
             detected schema
 
         """
-        schema = {}
         q: str = table_config.get("query", "")
         query_type = table_config.get("query_type", "messages")
 
@@ -475,33 +544,12 @@ class TapSumoLogic(Tap):
         merged_params = self._merge_query_params(table_config)
         q = self._resolve_query(q, merged_params)
 
+        # For metrics queries, return predefined schema
+        if query_type == "metrics":
+            return self._get_metrics_schema(table_config)
+
         if query_type in ("records", "messages"):
             q += " | limit 1"
-
-        # For metrics queries during schema inference, we don't need to fetch data
-        # The schema is predefined, so we can skip the API call entirely
-        # Users can override this by providing a custom schema in their config
-        if query_type == "metrics":
-            self.logger.info("Using predefined schema for metrics query.")
-            # Use user-provided primary_keys if available, otherwise empty list
-            user_primary_keys = table_config.get("primary_keys", [])
-            if user_primary_keys:
-                self.logger.info(
-                    f"Using user-provided primary_keys for metrics: {user_primary_keys}"
-                )
-            return {
-                "type": "object",
-                "properties": {
-                    "metricDefinition": {"type": ["object", "null"]},
-                    "points": {"type": ["object", "null"]},
-                },
-                "key_properties": user_primary_keys if user_primary_keys else [],
-            }
-
-        start_date = self.config["start_date"]
-        end_date = self.config["end_date"]
-        time_zone = self.config["time_zone"]
-        base_type = {"type": ["null", "string"]}
 
         self.logger.info("Running query in sumologic to determine table schema.")
         sumo = SumoLogic(
@@ -510,9 +558,9 @@ class TapSumoLogic(Tap):
 
         fields = sumo.get_sumologic_fields(
             q,
-            start_date,
-            end_date,
-            time_zone,
+            self.config["start_date"],
+            self.config["end_date"],
+            self.config["time_zone"],
             table_config.get("by_receipt_time", False),
             table_config.get("auto_parsing_mode", "intelligent"),
             query_type,
@@ -522,41 +570,6 @@ class TapSumoLogic(Tap):
         )
 
         if query_type in ("records", "messages"):
-            key_properties = []
-            for field in fields:
-                field_name = field["name"]
-                field_type = field["fieldType"]
-                key_field = field["keyField"]
-
-                schema[field_name] = copy.deepcopy(base_type)
-
-                if field_type == "int":
-                    schema[field_name]["type"].append("integer")
-                elif field_type == "long":
-                    schema[field_name]["type"].append("integer")
-                elif field_type == "double":
-                    schema[field_name]["type"].append("number")
-                # a potential bug in the SDK will turn all booleans to True unless
-                # this is commented out. This can be uncommented when the fix is
-                # implemented
-                # elif field_type == "boolean":
-                #     schema[field_name]["type"].append("boolean")
-
-                if key_field:
-                    key_properties.append(field_name)
-
-            # add start and end date
-            schema["start_date"] = base_type
-            schema["end_date"] = base_type
-            schema["time_zone"] = base_type
-            key_properties += ["start_date", "end_date", "time_zone"]
-            if query_type == "messages":
-                key_properties += ["_messagetime", "_messageid"]
-
-            return {
-                "type": "object",
-                "properties": schema,
-                "key_properties": key_properties,
-            }
+            return self._build_schema_from_fields(fields, query_type)
 
         return {}
