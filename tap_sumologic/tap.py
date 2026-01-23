@@ -480,15 +480,22 @@ class TapSumoLogic(Tap):
 
         # For metrics queries during schema inference, we don't need to fetch data
         # The schema is predefined, so we can skip the API call entirely
+        # Users can override this by providing a custom schema in their config
         if query_type == "metrics":
             self.logger.info("Using predefined schema for metrics query.")
+            # Use user-provided primary_keys if available, otherwise empty list
+            user_primary_keys = table_config.get("primary_keys", [])
+            if user_primary_keys:
+                self.logger.info(
+                    f"Using user-provided primary_keys for metrics: {user_primary_keys}"
+                )
             return {
                 "type": "object",
                 "properties": {
                     "metricDefinition": {"type": ["object", "null"]},
                     "points": {"type": ["object", "null"]},
                 },
-                "key_properties": [],
+                "key_properties": user_primary_keys if user_primary_keys else [],
             }
 
         start_date = self.config["start_date"]
