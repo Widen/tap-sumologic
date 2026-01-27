@@ -156,6 +156,8 @@ class SumoLogic(object):
                 },
             },
         }
+        self.logger.info("params for metrics query: %s", params)
+
         if quantization is None:
             del params["queries"][0]["quantization"]
         if rollup is None:
@@ -163,6 +165,8 @@ class SumoLogic(object):
         if timeshift is None:
             del params["queries"][0]["timeshift"]
         r = self.post("/metricsQueries", params)
+
+        self.logger.info("API response r: %s", r.text)
         return json.loads(r.text)
 
     def get_sumologic_fields(
