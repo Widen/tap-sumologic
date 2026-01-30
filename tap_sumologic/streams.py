@@ -264,7 +264,6 @@ class SearchJobStream(SumoLogicStream):
                 metrics_data = response["queryResult"][0]["timeSeriesList"][
                     "timeSeries"
                 ]
-                raise RuntimeError("METRIC DATA: %s", metrics_data)
                 self.logger.info(
                     f"✓ Retrieved {len(metrics_data)} time series from Sumo Logic"
                 )
