@@ -100,7 +100,7 @@ class SearchJobStream(SumoLogicStream):
                 count = count + len(recs)
                 if count < record_count:
                     self.logger.info(
-                        "Waiting 2 seconds before next paginated API call to avoid "
+                        "Waiting 1 second before next paginated API call to avoid "
                         "rate limit..."
                     )
                     time.sleep(pagination_delay)
@@ -134,7 +134,7 @@ class SearchJobStream(SumoLogicStream):
 
         if self.query_type in ["messages", "records"]:
             delay = 5
-            pagination_delay = 2
+            pagination_delay = 1
             search_job = self.conn.search_job(
                 self.query,
                 self.config["start_date"],
