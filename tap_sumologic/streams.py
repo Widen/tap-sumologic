@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -58,6 +58,56 @@ class SearchJobStream(SumoLogicStream):
         self.rollup = rollup
         self.timeshift = timeshift
 
+    def _wait_for_search_job(self, search_job: dict, delay: int) -> Optional[dict]:
+        """Poll until the search job finishes or is cancelled."""
+        status = self.conn.search_job_status(search_job)
+        while status["state"] != "DONE GATHERING RESULTS":
+            if status["state"] == "CANCELLED":
+                return None
+            time.sleep(delay)
+            self.logger.info("")
+            status = self.conn.search_job_status(search_job)
+            # remove key histogramBuckets from status
+            del status["histogramBuckets"]
+            self.logger.info(f"Query Status: {status}")
+        return status
+
+    def _fetch_search_job_records(
+        self,
+        search_job: dict,
+        record_count: int,
+        custom_columns: Dict[str, Any],
+        limit: int,
+        pagination_delay: int,
+    ) -> List[Dict[str, Any]]:
+        """Fetch search job results with optional pagination delays."""
+        records: List[Dict[str, Any]] = []
+        count = 0
+        while count < record_count:
+            self.logger.info(
+                f"Get {self.query_type} {count} of {record_count}, limit={limit}"
+            )
+            response = self.conn.search_job_records(
+                search_job, self.query_type, limit=limit, offset=count
+            )
+            self.logger.info(f"Got {self.query_type} {count} of {record_count}")
+
+            recs = response[self.query_type]
+            for rec in recs:
+                records.append({**rec["map"], **custom_columns})
+
+            if len(recs) > 0:
+                count = count + len(recs)
+                if count < record_count:
+                    self.logger.info(
+                        "Waiting 2 seconds before next paginated API call to avoid "
+                        "rate limit..."
+                    )
+                    time.sleep(pagination_delay)
+            else:
+                break  # make sure we exit if nothing comes back
+        return records
+
     def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
@@ -67,7 +117,7 @@ class SearchJobStream(SumoLogicStream):
         """
         self.logger.info("Running query in sumologic to get records")
 
-        records = []
+        records: List[Dict[str, Any]] = []
         limit = 10000
 
         now_datetime = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -82,6 +132,7 @@ class SearchJobStream(SumoLogicStream):
 
         if self.query_type in ["messages", "records"]:
             delay = 5
+            pagination_delay = 2
             search_job = self.conn.search_job(
                 self.query,
                 self.config["start_date"],
@@ -92,47 +143,20 @@ class SearchJobStream(SumoLogicStream):
             )
             # self.logger.info(search_job)
 
-            status = self.conn.search_job_status(search_job)
-            while status["state"] != "DONE GATHERING RESULTS":
-                if status["state"] == "CANCELLED":
-                    break
-                time.sleep(delay)
-                self.logger.info("")
-                status = self.conn.search_job_status(search_job)
-                # remove key histogramBuckets from status
-                del status["histogramBuckets"]
-                self.logger.info(f"Query Status: {status}")
+            status = self._wait_for_search_job(search_job, delay)
+            if status is None:
+                return iter([])
 
             self.logger.info(status["state"])
 
-            if status["state"] == "DONE GATHERING RESULTS":
-                record_count = status[f"{self.query_type[:-1]}Count"]
-                count = 0
-                while count < record_count:
-                    self.logger.info(
-                        f"Get {self.query_type} {count} of {record_count}, "
-                        f"limit={limit}"
-                    )
-                    response = self.conn.search_job_records(
-                        search_job, self.query_type, limit=limit, offset=count
-                    )
-                    self.logger.info(f"Got {self.query_type} {count} of {record_count}")
-
-                    recs = response[self.query_type]
-                    # extract the result maps to put them in the list of records
-                    for rec in recs:
-                        records.append({**rec["map"], **custom_columns})
-
-                    if len(recs) > 0:
-                        count = count + len(recs)
-                        # Add delay between paginated API calls to avoid rate limit
-                        if count < record_count:
-                            self.logger.info(
-                                "Waiting 2 seconds before next paginated API call to avoid rate limit..."
-                            )
-                            time.sleep(2)
-                    else:
-                        break  # make sure we exit if nothing comes back
+            record_count = status[f"{self.query_type[:-1]}Count"]
+            records = self._fetch_search_job_records(
+                search_job=search_job,
+                record_count=record_count,
+                custom_columns=custom_columns,
+                limit=limit,
+                pagination_delay=pagination_delay,
+            )
 
         elif self.query_type == "metrics":
             response = self.conn.metrics_query(
@@ -144,8 +168,11 @@ class SearchJobStream(SumoLogicStream):
                 self.timeshift,
             )
             records = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            # Enable below lines to add delay iff we've back to back metric queries to be triggered to avoid rate limit
-            # self.logger.info("Waiting 15 seconds after metrics query to avoid rate limit...")
+            # Enable below lines to add delay iff we've back to back metric queries
+            # to be triggered to avoid rate limit.
+            # self.logger.info(
+            #     "Waiting 15 seconds after metrics query to avoid rate limit..."
+            # )
             # time.sleep(15)
 
         for row in records:
