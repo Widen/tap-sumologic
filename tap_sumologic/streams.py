@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -108,7 +108,9 @@ class SearchJobStream(SumoLogicStream):
                 break  # make sure we exit if nothing comes back
         return records
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def get_records(
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
@@ -145,18 +147,18 @@ class SearchJobStream(SumoLogicStream):
 
             status = self._wait_for_search_job(search_job, delay)
             if status is None:
-                return iter([])
+                self.logger.info("Search job was cancelled, no records to yield")
+            else:
+                self.logger.info(status["state"])
 
-            self.logger.info(status["state"])
-
-            record_count = status[f"{self.query_type[:-1]}Count"]
-            records = self._fetch_search_job_records(
-                search_job=search_job,
-                record_count=record_count,
-                custom_columns=custom_columns,
-                limit=limit,
-                pagination_delay=pagination_delay,
-            )
+                record_count = status[f"{self.query_type[:-1]}Count"]
+                records = self._fetch_search_job_records(
+                    search_job=search_job,
+                    record_count=record_count,
+                    custom_columns=custom_columns,
+                    limit=limit,
+                    pagination_delay=pagination_delay,
+                )
 
         elif self.query_type == "metrics":
             response = self.conn.metrics_query(
