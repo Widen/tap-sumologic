@@ -142,7 +142,6 @@ class SearchJobStream(SumoLogicStream):
         for row in records:
             yield row
 
-
     def _write_schema_message(self) -> None:
         """Override to add custom schema emission behavior."""
         self.logger.info(f"Emitting schema for {self.name}")
