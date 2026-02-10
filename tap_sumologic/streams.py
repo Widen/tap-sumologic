@@ -147,4 +147,4 @@ class SearchJobStream(SumoLogicStream):
         """Override to add custom schema emission behavior."""
         self.logger.info(f"Emitting schema for {self.name}")
         super()._write_schema_message()
-        time.sleep(1) # Add delay between streams to prevent buffering issues
+        time.sleep(1)  # Add delay between streams to prevent buffering issues
