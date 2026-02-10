@@ -220,10 +220,14 @@ class TapSumoLogic(Tap):
         # Discover streams
         streams = self.discover_streams()
 
-        self.logger.info(f"Found {len(streams)} streams to sync: {[s.name for s in streams]}")
+        self.logger.info(
+            f"Found {len(streams)} streams to sync: {[s.name for s in streams]}"
+        )
 
         for idx, stream in enumerate(streams, 1):
-            self.logger.info(f"[{idx}/{len(streams)}] Starting sync for stream: {stream.name}")
+            self.logger.info(
+                f"[{idx}/{len(streams)}] Starting sync for stream: {stream.name}"
+            )
 
             # CRITICAL: Manually write schema message using singer-sdk's writer
             self.logger.info(f"Emitting SCHEMA for {stream.name}")
@@ -232,7 +236,9 @@ class TapSumoLogic(Tap):
             stream._write_schema_message()
 
             # Add delay to ensure schema is processed before records
-            self.logger.info(f"Waiting 2 seconds before emitting records for {stream.name}")
+            self.logger.info(
+                f"Waiting 2 seconds before emitting records for {stream.name}"
+            )
             time.sleep(2)
 
             # Now sync the stream (emits records)
