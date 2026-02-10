@@ -3,7 +3,6 @@
 import copy
 import datetime
 import json
-import time
 from typing import Dict, List
 
 from genson import SchemaBuilder
