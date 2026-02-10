@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -58,7 +58,9 @@ class SearchJobStream(SumoLogicStream):
         self.rollup = rollup
         self.timeshift = timeshift
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def get_records(  # noqa: C901
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
@@ -141,3 +143,9 @@ class SearchJobStream(SumoLogicStream):
 
         for row in records:
             yield row
+
+    def _write_schema_message(self) -> None:
+        """Override to add custom schema emission behavior."""
+        self.logger.info(f"Emitting schema for {self.name}")
+        super()._write_schema_message()
+        time.sleep(1)  # Add delay between streams to prevent buffering issues
