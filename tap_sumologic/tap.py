@@ -3,6 +3,8 @@
 import copy
 import datetime
 import json
+import time
+
 from typing import Dict, List
 
 from genson import SchemaBuilder
@@ -206,6 +208,44 @@ class TapSumoLogic(Tap):
             )
 
         return streams
+
+    def sync_all(self) -> None:
+        """Sync all streams with guaranteed schema emission per stream.
+
+        Overrides parent Tap.sync_all() to ensure:
+        1. Schema message is emitted before each stream's records
+        2. Delays between streams prevent buffering issues
+        3. Explicit logging for debugging schema emission timing
+        """
+        # Discover streams
+        streams = self.discover_streams()
+
+        self.logger.info(f"Found {len(streams)} streams to sync: {[s.name for s in streams]}")
+
+        for idx, stream in enumerate(streams, 1):
+            self.logger.info(f"[{idx}/{len(streams)}] Starting sync for stream: {stream.name}")
+
+            # CRITICAL: Manually write schema message using singer-sdk's writer
+            self.logger.info(f"Emitting SCHEMA for {stream.name}")
+
+            # Use the stream's built-in method to write schema
+            stream._write_schema_message()
+
+            # Add delay to ensure schema is processed before records
+            self.logger.info(f"Waiting 2 seconds before emitting records for {stream.name}")
+            time.sleep(2)
+
+            # Now sync the stream (emits records)
+            stream.sync()
+
+            self.logger.info(f"Completed sync for {stream.name}")
+
+            # Add delay between streams to prevent buffering issues
+            if idx < len(streams):
+                self.logger.info("Waiting 2 seconds before next stream")
+                time.sleep(2)
+
+        self.logger.info("All streams synced successfully")
 
     def get_schema_for_table(self, table_config: Dict) -> Dict:
         """Detect json schema using a record set of query.
