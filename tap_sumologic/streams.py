@@ -170,7 +170,8 @@ class SearchJobStream(SumoLogicStream):
                     if len(recs) > 0:
                         count = count + len(recs)
                         if count < record_count:
-                            time.sleep(delay)
+                            # add delay between paginated requests to avoid hitting rate limits
+                            time.sleep(1)
                     else:
                         break
 
