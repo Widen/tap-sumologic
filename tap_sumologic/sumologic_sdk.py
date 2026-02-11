@@ -239,17 +239,9 @@ class SumoLogic(object):
                 break
             time.sleep(delay)
             count += 1
-            # Wait longer for aggregation queries to complete
-            # to ensure computed fields are available
             if count >= max_wait_iterations:
-                self.logger.warning(
-                    f"Schema discovery waiting longer than expected "
-                    f"({count * delay}s). Query might be complex."
-                )
                 break
             status = self.search_job_status(search_job)
-
-        self.logger.info(status["state"])
 
         if status["state"] in ["DONE GATHERING RESULTS", "GATHERING RESULTS"]:
             response = self.search_job_records(search_job, query_type, limit=1)
@@ -278,7 +270,6 @@ class SumoLogic(object):
         )
 
         if len(metrics_query["errors"]["errors"]) > 0:
-            self.logger.error(metrics_query["errors"])
             raise Exception(f"Request error: {metrics_query['errors']}")
 
         return metrics_query["queryResult"][0]["timeSeriesList"]["timeSeries"]

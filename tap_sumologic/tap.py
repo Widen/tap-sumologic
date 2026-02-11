@@ -191,25 +191,12 @@ class TapSumoLogic(Tap):
             Parsed tables configuration as a list.
 
         """
-        self.logger.debug(f"Raw tables_config type: {type(tables_config).__name__}")
         if isinstance(tables_config, str):
-            self.logger.info(
-                "Tables config received as JSON string (likely from env var)"
-            )
             try:
                 parsed_config = json.loads(tables_config)
-                self.logger.info(
-                    f"Successfully parsed tables config: {len(parsed_config)} table(s)"
-                )
                 return parsed_config
             except json.JSONDecodeError:
-                self.logger.error(
-                    f"Failed to parse tables config as JSON: {tables_config}"
-                )
                 raise ValueError("tables config must be a valid JSON array")
-        self.logger.debug(
-            f"Tables config is already a list: {len(tables_config)} table(s)"
-        )
         return tables_config
 
     def _parse_json_params(self, params, param_name: str = "params") -> Dict:
@@ -224,28 +211,16 @@ class TapSumoLogic(Tap):
 
         """
         if params is None:
-            self.logger.debug(f"{param_name}: None received, returning empty dict")
             return {}
         if isinstance(params, dict):
-            self.logger.debug(
-                f"{param_name}: dict received with keys: {list(params.keys())}"
-            )
             return params
         if isinstance(params, str):
-            self.logger.debug(f"{param_name}: string received, attempting JSON parse")
             try:
                 parsed = json.loads(params)
                 if isinstance(parsed, dict):
-                    self.logger.debug(
-                        f"{param_name}: parsed successfully "
-                        f"with keys: {list(parsed.keys())}"
-                    )
                     return parsed
             except json.JSONDecodeError:
-                self.logger.warning(f"Failed to parse {param_name} as JSON: {params}")
-        self.logger.debug(
-            f"{param_name}: returning empty dict (unhandled type or parse failure)"
-        )
+                pass
         return {}
 
     def _get_schema_for_stream(self, stream: Dict) -> Dict:
@@ -260,16 +235,13 @@ class TapSumoLogic(Tap):
         """
         schema_config = stream.get("schema")
         if isinstance(schema_config, str):
-            self.logger.info("Found path to a schema, not doing discovery.")
             with open(schema_config, "r") as f:
                 return json.load(f)
         elif isinstance(schema_config, dict):
-            self.logger.info("Found schema in config, not doing discovery.")
             builder = SchemaBuilder()
             builder.add_schema(schema_config)
             return builder.to_schema()
         else:
-            self.logger.info("No schema found. Inferring schema from API call.")
             return self.get_schema_for_table(stream)
 
     def _merge_query_params(self, stream: Dict) -> Dict[str, Any]:
@@ -288,56 +260,17 @@ class TapSumoLogic(Tap):
         """
         merged_query_params: Dict[str, Any] = {}
 
-        # Log raw config values for debugging
-        raw_top_level = self.config.get("query_params")
-        raw_table_level = stream.get("query_params")
-
-        self.logger.info("=" * 80)
-        self.logger.info("MERGING QUERY PARAMS")
-        self.logger.info("=" * 80)
-        self.logger.debug(
-            f"Raw query_params - top-level: {raw_top_level} "
-            f"(type: {type(raw_top_level).__name__}), "
-            f"table-level: {raw_table_level} "
-            f"(type: "
-            f"{type(raw_table_level).__name__ if raw_table_level else 'None'})"
-        )
-
-        # Get top-level query_params from self.config
-        # This includes the value from environment variable
-        # (which overrides meltano.yml)
         top_level_params = self._parse_json_params(
             self.config.get("query_params", {}), "top-level query_params"
         )
         if top_level_params:
-            self.logger.info(f"Step 1: Top-level query_params: {top_level_params}")
             merged_query_params.update(top_level_params)
-            self.logger.info(f"After step 1, merged: {merged_query_params}")
-        else:
-            self.logger.info("Step 1: No top-level query_params found")
 
-        # Get table-level query_params (takes precedence)
         table_params = self._parse_json_params(
             stream.get("query_params", {}), "table-level query_params"
         )
         if table_params:
-            self.logger.info(
-                f"Step 2: Table-level query_params: {table_params} "
-                "(will override top-level)"
-            )
             merged_query_params.update(table_params)
-            self.logger.info(f"After step 2, merged: {merged_query_params}")
-        else:
-            self.logger.info("Step 2: No table-level query_params found")
-
-        if merged_query_params:
-            self.logger.info("=" * 80)
-            self.logger.info(f"FINAL MERGED query_params: {merged_query_params}")
-            self.logger.info("=" * 80)
-        else:
-            self.logger.warning(
-                "No query_params found (both top-level and table-level are empty)"
-            )
 
         return merged_query_params
 
@@ -353,69 +286,22 @@ class TapSumoLogic(Tap):
 
         """
         if not query_params:
-            self.logger.debug("No query_params provided, returning original query")
             return query
-
-        self.logger.info(f"Original query: {query}")
-        self.logger.info(f"Query params to substitute: {query_params}")
 
         resolved_query = query
         for param_name, param_value in query_params.items():
             placeholder = "{" + param_name + "}"
             if placeholder in resolved_query:
-                self.logger.debug(f"Substituting {placeholder} -> {param_value}")
                 resolved_query = resolved_query.replace(placeholder, str(param_value))
-            else:
-                self.logger.warning(
-                    f"Placeholder {placeholder} not found in query, skipping"
-                )
 
-        self.logger.info(f"Resolved query: {resolved_query}")
         return resolved_query
 
     def discover_streams(self) -> List[SearchJobStream]:  # noqa: C901
         """Return a list of discovered streams."""
-        self.logger.info("=" * 60)
-        self.logger.info("Starting stream discovery")
-        self.logger.info("=" * 60)
-        self.logger.info(
-            "TAP-SUMOLOGIC VERSION: This version supports query_params substitution"
-        )
-
-        # Log important config values for debugging
-        self.logger.info(f"Config start_date: {self.config.get('start_date')}")
-        self.logger.info(f"Config end_date: {self.config.get('end_date')}")
-        self.logger.info(f"Config time_zone: {self.config.get('time_zone')}")
-        self.logger.info(f"Config root_url: {self.config.get('root_url')}")
-        self.logger.debug(
-            f"Config query_params (raw): {self.config.get('query_params')} "
-            f"(type: {type(self.config.get('query_params')).__name__})"
-        )
-
         streams = []
         tables_config = self._parse_tables_config(self.config["tables"])
 
         for idx, stream in enumerate(tables_config):
-            self.logger.info("-" * 40)
-            self.logger.info(f"Processing stream {idx + 1}/{len(tables_config)}")
-            self.logger.info(f"Table name: {stream.get('table_name')}")
-            self.logger.info(f"Query type: {stream.get('query_type', 'messages')}")
-            self.logger.info(f"Original query: {stream.get('query')}")
-
-            # Check if query has placeholders
-            query_template = stream.get("query", "")
-            if "{" in query_template and "}" in query_template:
-                self.logger.info(
-                    "✓ Query contains placeholders - will be resolved at runtime"
-                )
-            else:
-                self.logger.warning(
-                    "⚠ Query does NOT contain placeholders - "
-                    "query_params will have no effect"
-                )
-
-            self.logger.debug(f"Stream config: {stream}")
-
             schema = self._get_schema_for_stream(stream)
 
             query_type = stream.get("query_type", "messages")
@@ -450,11 +336,7 @@ class TapSumoLogic(Tap):
                     query_params=merged_query_params if merged_query_params else None,
                 )
             )
-            self.logger.info(f"Stream '{stream.get('table_name')}' added successfully")
 
-        self.logger.info("=" * 60)
-        self.logger.info(f"Stream discovery complete. Total streams: {len(streams)}")
-        self.logger.info("=" * 60)
         return streams
 
     def _get_metrics_schema(self, table_config: Dict) -> Dict:
@@ -467,12 +349,7 @@ class TapSumoLogic(Tap):
             Schema dictionary for metrics.
 
         """
-        self.logger.info("Using predefined schema for metrics query.")
         user_primary_keys = table_config.get("primary_keys", [])
-        if user_primary_keys:
-            self.logger.info(
-                f"Using user-provided primary_keys for metrics: {user_primary_keys}"
-            )
         return {
             "type": "object",
             "properties": {
@@ -551,7 +428,6 @@ class TapSumoLogic(Tap):
         if query_type in ("records", "messages"):
             q += " | limit 1"
 
-        self.logger.info("Running query in sumologic to determine table schema.")
         sumo = SumoLogic(
             self.config["access_id"], self.config["access_key"], self.config["root_url"]
         )
