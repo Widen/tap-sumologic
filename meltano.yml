@@ -30,6 +30,14 @@ plugins:
         query: >
           *
           | count by _collector
+      # Example metrics query with parameterized cluster_name
+      # - table_name: cluster_cpu_metrics
+      #   query_type: metrics
+      #   query: >
+      #     metric=aggregate:kube_resource_requests:pod:cpu cluster={cluster_name}
+      #     | quantize to 1h using avg | avg by namespace
+      #   query_params:
+      #     cluster_name: my-cluster-name
   loaders:
   - name: target-jsonl
     variant: andyh1203

@@ -90,9 +90,31 @@ tap-sumologic --about
 - `timeshift`: int: optional: Shifts the time series from your metrics query by the specified amount of time. This can
   help when comparing a time series across multiple time periods. Specified as a signed duration in milliseconds. Only
   applicable on 'metrics' queries.
+- `query_params`: object: optional: A dictionary of query parameters to substitute in the query string. Parameters in 
+  the query should be specified as `{param_name}` and will be replaced with the corresponding value from this dictionary.
+  This is useful when running parameterized queries from orchestration tools like Dagster. Example: `{'cluster_name': 'my-cluster'}`.
 - `schema`: optional: A valid Singer schema or a path-like string that provides
   the path to a `.json` file that contains a valid Singer schema. If provided,
   the schema will not be inferred from the results of an api call.
+
+#### Example: Parameterized Metrics Query
+
+You can use query parameters to dynamically substitute values in your Sumo Logic queries. This is particularly useful 
+when orchestrating data pipelines with tools like Dagster or Airflow:
+
+```yaml
+tables:
+  - table_name: cluster_cpu_metrics
+    query_type: metrics
+    query: >
+      metric=aggregate:kube_resource_requests:pod:cpu cluster={cluster_name}
+      | quantize to 1h using avg | avg by namespace
+    query_params:
+      cluster_name: my-production-cluster
+```
+
+When triggered via a Dagster job, you can override the `query_params` in your meltano configuration to pass different 
+cluster names dynamically.
 
 ### Configure using environment variables
 

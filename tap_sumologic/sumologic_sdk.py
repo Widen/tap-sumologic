@@ -227,6 +227,7 @@ class SumoLogic(object):
         fields = []
         delay = 5
         count = 0
+        max_wait_iterations = 12  # Wait up to 60 seconds for aggregation queries
 
         search_job = self.search_job(
             q, from_time, to_time, time_zone, by_receipt_time, auto_parsing_mode
@@ -238,11 +239,9 @@ class SumoLogic(object):
                 break
             time.sleep(delay)
             count += 1
-            if count == 2:  # don't need to wait for all the results
+            if count >= max_wait_iterations:
                 break
             status = self.search_job_status(search_job)
-
-        self.logger.info(status["state"])
 
         if status["state"] in ["DONE GATHERING RESULTS", "GATHERING RESULTS"]:
             response = self.search_job_records(search_job, query_type, limit=1)
@@ -271,7 +270,6 @@ class SumoLogic(object):
         )
 
         if len(metrics_query["errors"]["errors"]) > 0:
-            self.logger.error(metrics_query["errors"])
             raise Exception(f"Request error: {metrics_query['errors']}")
 
         return metrics_query["queryResult"][0]["timeSeriesList"]["timeSeries"]

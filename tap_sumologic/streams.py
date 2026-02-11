@@ -1,8 +1,9 @@
 """Stream type classes for tap-sumologic."""
 
+import json
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional, Union
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -24,6 +25,7 @@ class SearchJobStream(SumoLogicStream):
         quantization: Optional[int] = None,
         rollup: Optional[str] = None,
         timeshift: Optional[int] = None,
+        query_params: Optional[Union[Dict[str, Any], str]] = None,
     ) -> None:
         """Class initialization.
 
@@ -40,6 +42,8 @@ class SearchJobStream(SumoLogicStream):
             quantization: see tap.py
             rollup: see tap.py
             timeshift: see tap.py
+            query_params: dictionary of parameters to substitute in the query.
+                Can be a dict or a JSON string.
 
         """
         super().__init__(tap=tap, schema=schema)
@@ -57,18 +61,70 @@ class SearchJobStream(SumoLogicStream):
         self.quantization = quantization
         self.rollup = rollup
         self.timeshift = timeshift
+        self.query_params = self._parse_query_params(query_params)
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def _parse_query_params(
+        self, query_params: Optional[Union[Dict[str, Any], str]]
+    ) -> Dict[str, Any]:
+        """Parse query_params, handling both dict and JSON string formats.
+
+        Args:
+            query_params: Query parameters as dict or JSON string.
+
+        Returns:
+            Parsed query parameters as a dictionary.
+
+        """
+        if query_params is None:
+            return {}
+        if isinstance(query_params, dict):
+            return query_params
+        if isinstance(query_params, str):
+            try:
+                parsed = json.loads(query_params)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def _get_resolved_query(self) -> str:
+        """Resolve query parameters and return the final query string.
+
+        Substitutes {param_name} placeholders in the query with values
+        from query_params dictionary.
+
+        Returns:
+            The query string with all parameters substituted.
+
+        """
+        if self.query is None:
+            return ""
+
+        resolved_query = self.query
+        if self.query_params:
+            for param_name, param_value in self.query_params.items():
+                placeholder = "{" + param_name + "}"
+                if placeholder in resolved_query:
+                    resolved_query = resolved_query.replace(
+                        placeholder, str(param_value)
+                    )
+
+        return resolved_query
+
+    def get_records(  # noqa: C901
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
         stream if partitioning is required for the stream. Most implementations do not
         require partitioning and should ignore the `context` argument.
         """
-        self.logger.info("Running query in sumologic to get records")
-
         records = []
         limit = 10000
+
+        resolved_query = self._get_resolved_query()
 
         now_datetime = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
         custom_columns = {
@@ -83,54 +139,46 @@ class SearchJobStream(SumoLogicStream):
         if self.query_type in ["messages", "records"]:
             delay = 5
             search_job = self.conn.search_job(
-                self.query,
+                resolved_query,
                 self.config["start_date"],
                 self.config["end_date"],
                 self.config["time_zone"],
                 self.by_receipt_time,
                 self.auto_parsing_mode,
             )
-            # self.logger.info(search_job)
 
             status = self.conn.search_job_status(search_job)
             while status["state"] != "DONE GATHERING RESULTS":
                 if status["state"] == "CANCELLED":
                     break
                 time.sleep(delay)
-                self.logger.info("")
                 status = self.conn.search_job_status(search_job)
-                # remove key histogramBuckets from status
                 del status["histogramBuckets"]
-                self.logger.info(f"Query Status: {status}")
-
-            self.logger.info(status["state"])
 
             if status["state"] == "DONE GATHERING RESULTS":
                 record_count = status[f"{self.query_type[:-1]}Count"]
                 count = 0
                 while count < record_count:
-                    self.logger.info(
-                        f"Get {self.query_type} {count} of {record_count}, "
-                        f"limit={limit}"
-                    )
                     response = self.conn.search_job_records(
                         search_job, self.query_type, limit=limit, offset=count
                     )
-                    self.logger.info(f"Got {self.query_type} {count} of {record_count}")
 
                     recs = response[self.query_type]
-                    # extract the result maps to put them in the list of records
                     for rec in recs:
                         records.append({**rec["map"], **custom_columns})
 
                     if len(recs) > 0:
                         count = count + len(recs)
+                        if count < record_count:
+                            # Add delay between paginated requests
+                            # to avoid hitting rate limits
+                            time.sleep(1)
                     else:
-                        break  # make sure we exit if nothing comes back
+                        break
 
         elif self.query_type == "metrics":
             response = self.conn.metrics_query(
-                self.query,
+                resolved_query,
                 self.config["start_date"],
                 self.config["end_date"],
                 self.quantization,

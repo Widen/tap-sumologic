@@ -3,7 +3,7 @@
 import copy
 import datetime
 import json
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from genson import SchemaBuilder
 from singer_sdk import Tap
@@ -59,6 +59,17 @@ class TapSumoLogic(Tap):
             default="UTC",  # type: ignore
             description="The time zone for the queries. Sets the `timeZone` "
             "parameter for all queries",
+        ),
+        th.Property(
+            "query_params",
+            th.ObjectType(),
+            required=False,
+            description="A dictionary of query parameters to substitute "
+            "in the query string for ALL tables. Parameters in the query should be "
+            "specified as {param_name} and will be replaced with the "
+            "corresponding value from this dictionary. This is merged with "
+            "table-level query_params (table-level takes precedence). "
+            "Example: {'cluster_name': 'my-cluster'}",
         ),
         th.Property(
             "tables",
@@ -138,6 +149,16 @@ class TapSumoLogic(Tap):
                         "queries.",
                     ),
                     th.Property(
+                        "query_params",
+                        th.ObjectType(),
+                        required=False,
+                        description="A dictionary of query parameters to substitute "
+                        "in the query string. Parameters in the query should be "
+                        "specified as {param_name} and will be replaced with the "
+                        "corresponding value from this dictionary. "
+                        "Example: {'cluster_name': 'my-cluster'}",
+                    ),
+                    th.Property(
                         "schema",
                         th.CustomType(
                             {
@@ -160,52 +181,228 @@ class TapSumoLogic(Tap):
         ),
     ).to_dict()
 
-    def discover_streams(self) -> List[SearchJobStream]:  # type: ignore
+    def _parse_tables_config(self, tables_config):
+        """Parse tables config, handling JSON string format.
+
+        Args:
+            tables_config: Tables configuration (list or JSON string).
+
+        Returns:
+            Parsed tables configuration as a list.
+
+        """
+        if isinstance(tables_config, str):
+            try:
+                parsed_config = json.loads(tables_config)
+                return parsed_config
+            except json.JSONDecodeError:
+                raise ValueError("tables config must be a valid JSON array")
+        return tables_config
+
+    def _parse_json_params(self, params, param_name: str = "params") -> Dict:
+        """Parse parameters that may be dict or JSON string.
+
+        Args:
+            params: Parameters as dict or JSON string.
+            param_name: Name for logging purposes.
+
+        Returns:
+            Parsed parameters as a dictionary.
+
+        """
+        if params is None:
+            return {}
+        if isinstance(params, dict):
+            return params
+        if isinstance(params, str):
+            try:
+                parsed = json.loads(params)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def _get_schema_for_stream(self, stream: Dict) -> Dict:
+        """Get schema for a stream from config or by inference.
+
+        Args:
+            stream: Stream configuration dictionary.
+
+        Returns:
+            Schema dictionary.
+
+        """
+        schema_config = stream.get("schema")
+        if isinstance(schema_config, str):
+            with open(schema_config, "r") as f:
+                return json.load(f)
+        elif isinstance(schema_config, dict):
+            builder = SchemaBuilder()
+            builder.add_schema(schema_config)
+            return builder.to_schema()
+        else:
+            return self.get_schema_for_table(stream)
+
+    def _merge_query_params(self, stream: Dict) -> Dict[str, Any]:
+        """Merge top-level and table-level query params.
+
+        Top-level query_params (from env var TAP_*_QUERY_PARAMS) takes precedence
+        over meltano.yml defaults, and table-level query_params takes precedence
+        over top-level.
+
+        Args:
+            stream: Stream configuration dictionary.
+
+        Returns:
+            Merged query parameters dictionary.
+
+        """
+        merged_query_params: Dict[str, Any] = {}
+
+        top_level_params = self._parse_json_params(
+            self.config.get("query_params", {}), "top-level query_params"
+        )
+        if top_level_params:
+            merged_query_params.update(top_level_params)
+
+        table_params = self._parse_json_params(
+            stream.get("query_params", {}), "table-level query_params"
+        )
+        if table_params:
+            merged_query_params.update(table_params)
+
+        return merged_query_params
+
+    def _resolve_query(self, query: str, query_params: Dict) -> str:
+        """Resolve query by substituting parameter placeholders.
+
+        Args:
+            query: Query string with {param_name} placeholders.
+            query_params: Dictionary of parameter values.
+
+        Returns:
+            Query string with parameters substituted.
+
+        """
+        if not query_params:
+            return query
+
+        resolved_query = query
+        for param_name, param_value in query_params.items():
+            placeholder = "{" + param_name + "}"
+            if placeholder in resolved_query:
+                resolved_query = resolved_query.replace(placeholder, str(param_value))
+
+        return resolved_query
+
+    def discover_streams(self) -> List[SearchJobStream]:  # noqa: C901
         """Return a list of discovered streams."""
         streams = []
-        for stream in self.config["tables"]:
-            schema_config = stream.get("schema")
-            if isinstance(schema_config, str):
-                self.logger.info("Found path to a schema, not doing discovery.")
-                with open(schema_config, "r") as f:
-                    schema = json.load(f)
+        tables_config = self._parse_tables_config(self.config["tables"])
 
-            elif isinstance(schema_config, dict):
-                self.logger.info("Found schema in config, not doing discovery.")
-                builder = SchemaBuilder()
-                builder.add_schema(schema_config)
-                schema = builder.to_schema()
+        for idx, stream in enumerate(tables_config):
+            schema = self._get_schema_for_stream(stream)
 
-            else:
-                self.logger.info("No schema found. Inferring schema from API call.")
-                schema = self.get_schema_for_table(stream)
-
-            if stream["query_type"] not in ("records", "messages", "metrics"):
+            query_type = stream.get("query_type", "messages")
+            if query_type not in ("records", "messages", "metrics"):
                 raise ValueError(
-                    f"Invalid query_type: {stream['query_type']}. "
-                    "Must be one of 'records' or 'messages'."
+                    f"Invalid query_type: {query_type}. "
+                    "Must be one of 'records', 'messages', or 'metrics'."
                 )
+
+            primary_keys = stream.get("primary_keys") or schema.get(
+                "key_properties", []
+            )
+
+            merged_query_params = self._merge_query_params(stream)
 
             streams.append(
                 SearchJobStream(
                     tap=self,
-                    name=stream["table_name"],
-                    query_type=stream["query_type"],
-                    primary_keys=stream["primary_keys"] or schema["key_properties"],
+                    name=stream.get("table_name", ""),
+                    query_type=query_type,
+                    primary_keys=primary_keys,
                     replication_key=stream.get(
                         "replication_key", self.config.get("replication_key", "")
                     ),
                     schema=schema,
-                    query=stream["query"],
-                    by_receipt_time=stream["by_receipt_time"],
-                    auto_parsing_mode=stream["auto_parsing_mode"],
+                    query=stream.get("query", ""),
+                    by_receipt_time=stream.get("by_receipt_time", False),
+                    auto_parsing_mode=stream.get("auto_parsing_mode", "intelligent"),
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
+                    query_params=merged_query_params if merged_query_params else None,
                 )
             )
 
         return streams
+
+    def _get_metrics_schema(self, table_config: Dict) -> Dict:
+        """Get predefined schema for metrics queries.
+
+        Args:
+            table_config: Table configuration dictionary.
+
+        Returns:
+            Schema dictionary for metrics.
+
+        """
+        user_primary_keys = table_config.get("primary_keys", [])
+        return {
+            "type": "object",
+            "properties": {
+                "metricDefinition": {"type": ["object", "null"]},
+                "points": {"type": ["object", "null"]},
+            },
+            "key_properties": user_primary_keys if user_primary_keys else [],
+        }
+
+    def _build_schema_from_fields(self, fields: List, query_type: str) -> Dict:
+        """Build schema from Sumo Logic fields.
+
+        Args:
+            fields: List of field definitions from Sumo Logic.
+            query_type: Type of query (records or messages).
+
+        Returns:
+            Schema dictionary.
+
+        """
+        schema: Dict[str, Any] = {}
+        key_properties: List[str] = []
+        base_type = {"type": ["null", "string"]}
+
+        for field in fields:
+            field_name = field["name"]
+            field_type = field["fieldType"]
+            key_field = field["keyField"]
+
+            schema[field_name] = copy.deepcopy(base_type)
+
+            if field_type in ("int", "long"):
+                schema[field_name]["type"].append("integer")
+            elif field_type == "double":
+                schema[field_name]["type"].append("number")
+
+            if key_field:
+                key_properties.append(field_name)
+
+        # Add start and end date
+        schema["start_date"] = base_type
+        schema["end_date"] = base_type
+        schema["time_zone"] = base_type
+        key_properties += ["start_date", "end_date", "time_zone"]
+
+        if query_type == "messages":
+            key_properties += ["_messagetime", "_messageid"]
+
+        return {
+            "type": "object",
+            "properties": schema,
+            "key_properties": key_properties,
+        }
 
     def get_schema_for_table(self, table_config: Dict) -> Dict:
         """Detect json schema using a record set of query.
@@ -217,79 +414,38 @@ class TapSumoLogic(Tap):
             detected schema
 
         """
-        schema = {}
-        q: str = table_config["query"]
-        if table_config["query_type"] in ("records", "messages"):
-            q += " | limit 1"
-        start_date = self.config["start_date"]
-        end_date = self.config["end_date"]
-        time_zone = self.config["time_zone"]
-        base_type = {"type": ["null", "string"]}
+        q: str = table_config.get("query", "")
+        query_type = table_config.get("query_type", "messages")
 
-        self.logger.info("Running query in sumologic to determine table schema.")
+        # Resolve query parameters before making API call
+        merged_params = self._merge_query_params(table_config)
+        q = self._resolve_query(q, merged_params)
+
+        # For metrics queries, return predefined schema
+        if query_type == "metrics":
+            return self._get_metrics_schema(table_config)
+
+        if query_type in ("records", "messages"):
+            q += " | limit 1"
+
         sumo = SumoLogic(
             self.config["access_id"], self.config["access_key"], self.config["root_url"]
         )
 
         fields = sumo.get_sumologic_fields(
             q,
-            start_date,
-            end_date,
-            time_zone,
-            table_config["by_receipt_time"],
-            table_config["auto_parsing_mode"],
-            table_config["query_type"],
+            self.config["start_date"],
+            self.config["end_date"],
+            self.config["time_zone"],
+            table_config.get("by_receipt_time", False),
+            table_config.get("auto_parsing_mode", "intelligent"),
+            query_type,
             table_config.get("quantization"),
             table_config.get("rollup"),
             table_config.get("timeshift"),
         )
 
-        if table_config["query_type"] in ("records", "messages"):
-            key_properties = []
-            for field in fields:
-                field_name = field["name"]
-                field_type = field["fieldType"]
-                key_field = field["keyField"]
-
-                schema[field_name] = copy.deepcopy(base_type)
-
-                if field_type == "int":
-                    schema[field_name]["type"].append("integer")
-                elif field_type == "long":
-                    schema[field_name]["type"].append("integer")
-                elif field_type == "double":
-                    schema[field_name]["type"].append("number")
-                # a potential bug in the SDK will turn all booleans to True unless
-                # this is commented out. This can be uncommented when the fix is
-                # implemented
-                # elif field_type == "boolean":
-                #     schema[field_name]["type"].append("boolean")
-
-                if key_field:
-                    key_properties.append(field_name)
-
-            # add start and end date
-            schema["start_date"] = base_type
-            schema["end_date"] = base_type
-            schema["time_zone"] = base_type
-            key_properties += ["start_date", "end_date", "time_zone"]
-            if table_config["query_type"] == "messages":
-                key_properties += ["_messagetime", "_messageid"]
-
-            return {
-                "type": "object",
-                "properties": schema,
-                "key_properties": key_properties,
-            }
-
-        elif table_config["query_type"] == "metrics":
-            return {
-                "type": "object",
-                "properties": {
-                    "metricDefinition": {"type": ["object", "null"]},
-                    "points": {"type": ["object", "null"]},
-                },
-                "key_properties": ["metricDefinition", "points"],
-            }
+        if query_type in ("records", "messages"):
+            return self._build_schema_from_fields(fields, query_type)
 
         return {}
