@@ -186,9 +186,9 @@ class TapSumoLogic(Tap):
 
             else:
                 self.logger.info(
-                    "No schema found. Will infer schema from API call when stream starts."
+                    "No schema found. Will infer schema from API call"
+                    " when stream starts."
                 )
-                # Don't discover schema yet - pass None and let the stream discover it lazily
                 schema = None
 
             if stream["query_type"] not in ("records", "messages", "metrics"):
@@ -216,7 +216,7 @@ class TapSumoLogic(Tap):
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
-                    table_config=stream,  # Pass the full config for lazy schema discovery
+                    table_config=stream,
                 )
             )
 

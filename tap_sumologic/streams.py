@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional
 
 from tap_sumologic.client import SumoLogicStream
 
@@ -70,7 +70,9 @@ class SearchJobStream(SumoLogicStream):
         self.table_config = table_config
         self._schema_discovered = schema_provided
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def get_records(  # noqa: C901
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
