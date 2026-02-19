@@ -47,11 +47,7 @@ class SearchJobStream(SumoLogicStream):
         # Initialize with a placeholder schema if None
         if schema is None:
             # Provide a minimal schema that will be replaced during first sync
-            schema = {
-                "type": "object",
-                "properties": {},
-                "key_properties": []
-            }
+            schema = {"type": "object", "properties": {}, "key_properties": []}
             schema_provided = False
         else:
             schema_provided = True
@@ -83,7 +79,9 @@ class SearchJobStream(SumoLogicStream):
         """
         # Perform lazy schema discovery if needed
         if not self._schema_discovered and self.table_config:
-            self.logger.info(f"Discovering schema for stream '{self.name}' before processing...")
+            self.logger.info(
+                f"Discovering schema for stream '{self.name}' before processing..."
+            )
             discovered_schema = self._tap.get_schema_for_table(self.table_config)
 
             # Update the schema

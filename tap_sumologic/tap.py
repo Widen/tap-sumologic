@@ -170,18 +170,24 @@ class TapSumoLogic(Tap):
             # Schema will be discovered when the stream is actually processed
             schema = None
             if isinstance(schema_config, str):
-                self.logger.info("Found path to a schema, will load it when stream starts.")
+                self.logger.info(
+                    "Found path to a schema, will load it when stream starts."
+                )
                 with open(schema_config, "r") as f:
                     schema = json.load(f)
 
             elif isinstance(schema_config, dict):
-                self.logger.info("Found schema in config, will use it when stream starts.")
+                self.logger.info(
+                    "Found schema in config, will use it when stream starts."
+                )
                 builder = SchemaBuilder()
                 builder.add_schema(schema_config)
                 schema = builder.to_schema()
 
             else:
-                self.logger.info("No schema found. Will infer schema from API call when stream starts.")
+                self.logger.info(
+                    "No schema found. Will infer schema from API call when stream starts."
+                )
                 # Don't discover schema yet - pass None and let the stream discover it lazily
                 schema = None
 
