@@ -165,20 +165,31 @@ class TapSumoLogic(Tap):
         streams = []
         for stream in self.config["tables"]:
             schema_config = stream.get("schema")
+
+            # Store the schema_config and table_config for lazy evaluation
+            # Schema will be discovered when the stream is actually processed
+            schema = None
             if isinstance(schema_config, str):
-                self.logger.info("Found path to a schema, not doing discovery.")
+                self.logger.info(
+                    "Found path to a schema, will load it when stream starts."
+                )
                 with open(schema_config, "r") as f:
                     schema = json.load(f)
 
             elif isinstance(schema_config, dict):
-                self.logger.info("Found schema in config, not doing discovery.")
+                self.logger.info(
+                    "Found schema in config, will use it when stream starts."
+                )
                 builder = SchemaBuilder()
                 builder.add_schema(schema_config)
                 schema = builder.to_schema()
 
             else:
-                self.logger.info("No schema found. Inferring schema from API call.")
-                schema = self.get_schema_for_table(stream)
+                self.logger.info(
+                    "No schema found. Will infer schema from API call"
+                    " when stream starts."
+                )
+                schema = None
 
             if stream["query_type"] not in ("records", "messages", "metrics"):
                 raise ValueError(
@@ -186,12 +197,15 @@ class TapSumoLogic(Tap):
                     "Must be one of 'records' or 'messages'."
                 )
 
+            # Determine primary keys - use from config or defer to schema discovery
+            primary_keys = stream["primary_keys"] or []
+
             streams.append(
                 SearchJobStream(
                     tap=self,
                     name=stream["table_name"],
                     query_type=stream["query_type"],
-                    primary_keys=stream["primary_keys"] or schema["key_properties"],
+                    primary_keys=primary_keys,
                     replication_key=stream.get(
                         "replication_key", self.config.get("replication_key", "")
                     ),
@@ -202,6 +216,7 @@ class TapSumoLogic(Tap):
                     quantization=stream.get("quantization"),
                     rollup=stream.get("rollup"),
                     timeshift=stream.get("timeshift"),
+                    table_config=stream,
                 )
             )
 
