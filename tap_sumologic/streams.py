@@ -153,7 +153,7 @@ class SearchJobStream(SumoLogicStream):
                     self.logger.info(f"Got {self.query_type} {count} of {record_count}")
 
                     recs = response[self.query_type]
-                    # extract the result maps to put them in the list of records
+
                     for rec in recs:
                         records.append({**rec["map"], **custom_columns})
 
