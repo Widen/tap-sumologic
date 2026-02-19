@@ -24,6 +24,7 @@ class SearchJobStream(SumoLogicStream):
         quantization: Optional[int] = None,
         rollup: Optional[str] = None,
         timeshift: Optional[int] = None,
+        table_config: Optional[dict] = None,
     ) -> None:
         """Class initialization.
 
@@ -40,8 +41,21 @@ class SearchJobStream(SumoLogicStream):
             quantization: see tap.py
             rollup: see tap.py
             timeshift: see tap.py
+            table_config: the table configuration for lazy schema discovery
 
         """
+        # Initialize with a placeholder schema if None
+        if schema is None:
+            # Provide a minimal schema that will be replaced during first sync
+            schema = {
+                "type": "object",
+                "properties": {},
+                "key_properties": []
+            }
+            schema_provided = False
+        else:
+            schema_provided = True
+
         super().__init__(tap=tap, schema=schema)
 
         if primary_keys is None:
@@ -57,6 +71,8 @@ class SearchJobStream(SumoLogicStream):
         self.quantization = quantization
         self.rollup = rollup
         self.timeshift = timeshift
+        self.table_config = table_config
+        self._schema_discovered = schema_provided
 
     def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
@@ -65,6 +81,22 @@ class SearchJobStream(SumoLogicStream):
         stream if partitioning is required for the stream. Most implementations do not
         require partitioning and should ignore the `context` argument.
         """
+        # Perform lazy schema discovery if needed
+        if not self._schema_discovered and self.table_config:
+            self.logger.info(f"Discovering schema for stream '{self.name}' before processing...")
+            discovered_schema = self._tap.get_schema_for_table(self.table_config)
+
+            # Update the schema
+            self.schema = discovered_schema
+            self._schema = discovered_schema
+
+            # Update primary keys from discovered schema if not set
+            if not self.primary_keys and "key_properties" in discovered_schema:
+                self.primary_keys = discovered_schema["key_properties"]
+
+            self._schema_discovered = True
+            self.logger.info(f"Schema discovered for stream '{self.name}'")
+
         self.logger.info("Running query in sumologic to get records")
 
         records = []
