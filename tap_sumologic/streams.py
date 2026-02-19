@@ -84,10 +84,12 @@ class SearchJobStream(SumoLogicStream):
             self.logger.info(
                 f"Discovering schema for stream '{self.name}' before processing..."
             )
-            discovered_schema = self._tap.get_schema_for_table(self.table_config)
+            # Type ignore because _tap is typed as Tap but we know it's TapSumoLogic
+            discovered_schema = self._tap.get_schema_for_table(  # type: ignore
+                self.table_config
+            )
 
-            # Update the schema
-            self.schema = discovered_schema
+            # Update the internal schema (use _schema instead of schema property)
             self._schema = discovered_schema
 
             # Update primary keys from discovered schema if not set
