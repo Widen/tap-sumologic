@@ -59,7 +59,9 @@ class SearchJobStream(SumoLogicStream):
         self.rollup = rollup
         self.timeshift = timeshift
 
-    def get_records(self, context: Optional[Mapping[str, Any]]) -> Iterable[Dict[str, Any]]:
+    def get_records(
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
