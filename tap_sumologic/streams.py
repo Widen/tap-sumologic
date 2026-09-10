@@ -170,12 +170,6 @@ class SearchJobStream(SumoLogicStream):
                 self.timeshift,
             )
             records = response["queryResult"][0]["timeSeriesList"]["timeSeries"]
-            # Enable below lines to add delay iff we've back to back metric queries
-            # to be triggered to avoid rate limit.
-            # self.logger.info(
-            #     "Waiting 15 seconds after metrics query to avoid rate limit..."
-            # )
-            # time.sleep(15)
 
         for row in records:
             yield row
