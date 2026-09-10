@@ -1,6 +1,7 @@
 """Stream type classes for tap-sumologic."""
 
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
 
@@ -58,7 +59,7 @@ class SearchJobStream(SumoLogicStream):
         self.rollup = rollup
         self.timeshift = timeshift
 
-    def get_records(self, context: Optional[dict]) -> Iterable[Dict[str, Any]]:
+    def get_records(self, context: Optional[Mapping[str, Any]]) -> Iterable[Dict[str, Any]]:
         """Return a generator of row-type dictionary objects.
 
         The optional `context` argument is used to identify a specific slice of the
