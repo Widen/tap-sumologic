@@ -107,6 +107,7 @@ class SumoLogic(object):
             "timeZone": time_zone,
             "byReceiptTime": by_receipt_time,
             "autoParsingMode": auto_parsing_mode,
+            "requiresRawMessages": True,
         }
         r = self.post("/search/jobs", params)
         return json.loads(r.text)
